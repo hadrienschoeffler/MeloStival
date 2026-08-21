@@ -1,0 +1,22 @@
+{
+  "name": "melostival",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "client",
+    "server"
+  ],
+  "scripts": {
+    "avatars": "node scripts/generate-avatars.mjs",
+    "check": "node scripts/check-dependencies.mjs",
+    "predev": "npm run avatars && npm run check",
+    "dev": "concurrently -n AVATARS,SERVER,CLIENT -c auto \"node scripts/watch-avatars.mjs\" \"npm run dev -w server\" \"npm run dev -w client\"",
+    "prebuild": "npm run avatars && npm run check",
+    "build": "npm run build -w server && npm run build -w client",
+    "start": "npm run start -w server"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.0",
+    "typescript": "^5.9.2"
+  }
+}
