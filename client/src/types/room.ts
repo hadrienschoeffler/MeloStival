@@ -41,6 +41,7 @@ export interface GenshinRecapEntry {
   sessionId: string;
   answer: string | null;
   correct: boolean;
+  adjacent: boolean;
 }
 
 export interface GenshinState {

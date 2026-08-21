@@ -1,5 +1,5 @@
 import { randomInt } from "node:crypto";
-import { GENSHIN_LOCATIONS, isCorrectGenshinAnswer } from "./genshin-content.js";
+import { GENSHIN_LOCATIONS, getGenshinAnswerPoints } from "./genshin-content.js";
 import type { Player, PublicRoom, Room } from "./types.js";
 
 const ROOM_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -70,16 +70,22 @@ export function toPublicRoom(room: Room): PublicRoom {
             .filter((player) => player.role === "participant")
             .map((player) => {
               const answers = room.genshin!.responses[player.sessionId] ?? [null, null, null];
+              const answer = answers[room.genshin!.stage] ?? null;
+              const manuallyAccepted = Boolean(
+                room.genshin!.acceptedOverrides[player.sessionId]?.[room.genshin!.stage],
+              );
+              const points = answer
+                ? getGenshinAnswerPoints(
+                    answer,
+                    genshinLocation.answers[room.genshin!.stage],
+                    room.genshin!.stage,
+                  )
+                : 0;
               return {
-              sessionId: player.sessionId,
-              answer: answers[room.genshin!.stage] ?? null,
-              correct: Boolean(
-                room.genshin!.acceptedOverrides[player.sessionId]?.[room.genshin!.stage] ||
-                (answers[room.genshin!.stage] && isCorrectGenshinAnswer(
-                  answers[room.genshin!.stage]!,
-                  genshinLocation.answers[room.genshin!.stage],
-                )),
-              ),
+                sessionId: player.sessionId,
+                answer,
+                correct: manuallyAccepted || points > 0,
+                adjacent: !manuallyAccepted && room.genshin!.stage === 2 && points === 1,
               };
             })
           : null,

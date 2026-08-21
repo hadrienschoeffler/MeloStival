@@ -27,6 +27,7 @@ function App() {
   const [busy, setBusy] = useState(true);
   const [serverConnected, setServerConnected] = useState(socket.connected);
   const [canCreateRoom, setCanCreateRoom] = useState(true);
+  const [serverTimeOffsetMs, setServerTimeOffsetMs] = useState(0);
   const [connectionError, setConnectionError] = useState<string | null>(null);
 
   const tryResume = useCallback(async () => {
@@ -65,10 +66,24 @@ function App() {
     );
   }, []);
 
+  const syncServerTime = useCallback(() => {
+    const sentAt = Date.now();
+    socket.timeout(ACK_TIMEOUT_MS).emit(
+      "server:time",
+      (error: Error | null, result: { now: number }) => {
+        if (error) return;
+        const receivedAt = Date.now();
+        const estimatedClientTimeAtServerReply = (sentAt + receivedAt) / 2;
+        setServerTimeOffsetMs(result.now - estimatedClientTimeAtServerReply);
+      },
+    );
+  }, []);
+
   useEffect(() => {
     function onConnect() {
       setServerConnected(true);
       setConnectionError(null);
+      syncServerTime();
       refreshRoomAvailability();
       void tryResume();
     }
@@ -106,6 +121,7 @@ function App() {
     if (!socket.connected) {
       socket.connect();
     } else {
+      syncServerTime();
       refreshRoomAvailability();
       void tryResume();
     }
@@ -118,7 +134,7 @@ function App() {
       socket.off("room:closed", onRoomClosed);
       socket.off("room:availability", onRoomAvailability);
     };
-  }, [refreshRoomAvailability, tryResume]);
+  }, [refreshRoomAvailability, syncServerTime, tryResume]);
 
   async function createRoom(nickname: string, avatarId: string) {
     setBusy(true);
@@ -220,6 +236,7 @@ function App() {
         <GenshinGuesserScreen
           room={room}
           sessionId={sessionId}
+          serverTimeOffsetMs={serverTimeOffsetMs}
           onSubmit={submitGenshinAnswer}
           onAction={genshinAction}
           onAcceptAnswer={acceptGenshinAnswer}

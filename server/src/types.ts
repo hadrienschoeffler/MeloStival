@@ -56,6 +56,7 @@ export interface PublicGenshinRecapEntry {
   sessionId: string;
   answer: string | null;
   correct: boolean;
+  adjacent: boolean;
 }
 
 export interface PublicGenshinState {

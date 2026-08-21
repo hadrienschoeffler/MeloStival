@@ -1541,6 +1541,11 @@ p {
   color: var(--danger);
 }
 
+.recap-player > span.adjacent {
+  background: #f8e5bf;
+  color: #9a5d18;
+}
+
 .accept-answer-button {
   border: 0;
   background: transparent;

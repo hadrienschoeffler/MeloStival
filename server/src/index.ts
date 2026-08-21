@@ -2,7 +2,7 @@ import http from "node:http";
 import cors from "cors";
 import express from "express";
 import { Server } from "socket.io";
-import { GENSHIN_LOCATIONS, isCorrectGenshinAnswer } from "./genshin-content.js";
+import { GENSHIN_LOCATIONS, getGenshinAnswerPoints } from "./genshin-content.js";
 import {
   createRoomCode,
   isValidAvatarId,
@@ -130,6 +130,10 @@ function validateIdentity(payload: Record<string, unknown>): { sessionId: string
 }
 
 io.on("connection", (socket) => {
+  socket.on("server:time", (ack: (result: { now: number }) => void) => {
+    ack({ now: Date.now() });
+  });
+
   socket.on("room:availability", (ack: (result: { canCreate: boolean }) => void) => {
     ack({ canCreate: rooms.size === 0 });
   });
@@ -503,8 +507,9 @@ io.on("connection", (socket) => {
     answers[room.genshin.stage] = answer;
     room.genshin.responses[player.sessionId] = answers;
     const location = GENSHIN_LOCATIONS[room.genshin.locationIndex];
-    if (location && isCorrectGenshinAnswer(answer, location.answers[room.genshin.stage])) {
-      room.genshin.scores[player.sessionId] = (room.genshin.scores[player.sessionId] ?? 0) + 1;
+    if (location) {
+      const points = getGenshinAnswerPoints(answer, location.answers[room.genshin.stage], room.genshin.stage);
+      room.genshin.scores[player.sessionId] = (room.genshin.scores[player.sessionId] ?? 0) + points;
     }
     emitRoom(room);
     ack({ ok: true, room: toPublicRoom(room) });
@@ -567,8 +572,12 @@ io.on("connection", (socket) => {
     }
 
     const overrides = room.genshin.acceptedOverrides[targetSessionId] ?? [false, false, false];
-    const alreadyCorrect = isCorrectGenshinAnswer(answer, location.answers[room.genshin.stage]);
-    if (!alreadyCorrect && !overrides[room.genshin.stage]) {
+    const alreadyAwarded = getGenshinAnswerPoints(
+      answer,
+      location.answers[room.genshin.stage],
+      room.genshin.stage,
+    ) > 0;
+    if (!alreadyAwarded && !overrides[room.genshin.stage]) {
       overrides[room.genshin.stage] = true;
       room.genshin.acceptedOverrides[targetSessionId] = overrides;
       room.genshin.scores[targetSessionId] = (room.genshin.scores[targetSessionId] ?? 0) + 1;

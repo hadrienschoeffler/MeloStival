@@ -10,6 +10,7 @@ type GenshinAction = "advance" | "end" | "return";
 interface GenshinGuesserScreenProps {
   room: PublicRoom;
   sessionId: string;
+  serverTimeOffsetMs: number;
   onSubmit: (answer: string, automatic?: boolean) => Promise<void>;
   onAction: (action: GenshinAction) => Promise<void>;
   onAcceptAnswer: (targetSessionId: string) => Promise<void>;
@@ -21,7 +22,7 @@ const STAGE_COPY = [
   { title: "Dans quelle case ?" },
 ] as const;
 
-export function GenshinGuesserScreen({ room, sessionId, onSubmit, onAction, onAcceptAnswer }: GenshinGuesserScreenProps) {
+export function GenshinGuesserScreen({ room, sessionId, serverTimeOffsetMs, onSubmit, onAction, onAcceptAnswer }: GenshinGuesserScreenProps) {
   const genshin = room.genshin;
   const [answer, setAnswer] = useState("");
   const [submittedAnswer, setSubmittedAnswer] = useState("");
@@ -62,8 +63,9 @@ export function GenshinGuesserScreen({ room, sessionId, onSubmit, onAction, onAc
     connectedParticipants.length > 0 &&
     connectedParticipants.every((player) => genshin.submittedSessionIds.includes(player.sessionId));
   const stageCopy = STAGE_COPY[genshin.stage];
-  const remainingSeconds = Math.max(0, Math.ceil((genshin.responseDeadline - now) / 1000));
-  const timerExpired = now >= genshin.responseDeadline;
+  const estimatedServerNow = now + serverTimeOffsetMs;
+  const remainingSeconds = Math.max(0, Math.ceil((genshin.responseDeadline - estimatedServerNow) / 1000));
+  const timerExpired = estimatedServerNow >= genshin.responseDeadline;
   const image = [genshin.location.povImage, genshin.location.regionMapImage, genshin.location.gridImage][genshin.stage];
   const recapImage = genshin.stage === 2 ? genshin.location.answerGridImage : image;
   const questionImages = [
@@ -73,7 +75,7 @@ export function GenshinGuesserScreen({ room, sessionId, onSubmit, onAction, onAc
 
   useEffect(() => {
     if (isHost || submitted || genshin.phase !== "answering") return;
-    const delay = Math.max(0, genshin.responseDeadline - Date.now());
+    const delay = Math.max(0, genshin.responseDeadline - (Date.now() + serverTimeOffsetMs));
     const timeout = window.setTimeout(() => {
       const cleanAnswer = answer.trim();
       if (!cleanAnswer) return;
@@ -91,7 +93,7 @@ export function GenshinGuesserScreen({ room, sessionId, onSubmit, onAction, onAc
         .finally(() => setBusy(false));
     }, delay);
     return () => window.clearTimeout(timeout);
-  }, [answer, genshin.phase, genshin.responseDeadline, isHost, onSubmit, submitted]);
+  }, [answer, genshin.phase, genshin.responseDeadline, isHost, onSubmit, serverTimeOffsetMs, submitted]);
 
   async function run(action: () => Promise<void>) {
     if (busy) return;
@@ -168,7 +170,9 @@ export function GenshinGuesserScreen({ room, sessionId, onSubmit, onAction, onAc
                 <article className="recap-player" key={entry.sessionId}>
                   <img src={avatarSrc(player.avatarId)} alt="" />
                   <strong>{player.nickname}</strong>
-                  <span className={entry.correct ? "correct" : "incorrect"}>{entry.answer ?? "—"}</span>
+                  <span className={entry.adjacent ? "adjacent" : entry.correct ? "correct" : "incorrect"}>
+                    {entry.answer ?? "—"}
+                  </span>
                   {isHost && !entry.correct && entry.answer && (
                     <button
                       className="accept-answer-button"
