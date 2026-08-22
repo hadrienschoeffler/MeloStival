@@ -20,6 +20,15 @@ export const GENSHIN_LOCATIONS: GenshinLocationDefinition[] = [
     answerGridImage: "/genshin/reponse_entree.PNG",
     answers: [["Enkanomiya"], ["Entrée", "Entree"], ["F15", "F 15"]],
   },
+  {
+    id: "2",
+    title: "Entrée d'Enkanomiya",
+    povImage: "/genshin/Lieu_1.png",
+    regionMapImage: "/genshin/Enkanomiya.PNG",
+    gridImage: "/genshin/entree.PNG",
+    answerGridImage: "/genshin/reponse_entree.PNG",
+    answers: [["Enkanomiya"], ["Entrée", "Entree"], ["F15", "F 15"]],
+  },
 ];
 
 export function normalizeGenshinAnswer(value: string): string {

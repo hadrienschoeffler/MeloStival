@@ -9,6 +9,11 @@ export interface AvatarOption {
 
 export const AVATARS: AvatarOption[] = [
   {
+    "id": "Aberaku_Icon.webp",
+    "label": "Aberaku Icon",
+    "src": "/avatars/Aberaku_Icon.webp"
+  },
+  {
     "id": "Aether_Icon.webp",
     "label": "Aether Icon",
     "src": "/avatars/Aether_Icon.webp"
@@ -17,6 +22,11 @@ export const AVATARS: AvatarOption[] = [
     "id": "Aino_Icon.webp",
     "label": "Aino Icon",
     "src": "/avatars/Aino_Icon.webp"
+  },
+  {
+    "id": "Ajaw_Icon.webp",
+    "label": "Ajaw Icon",
+    "src": "/avatars/Ajaw_Icon.webp"
   },
   {
     "id": "Albedo_Icon.webp",
@@ -29,6 +39,11 @@ export const AVATARS: AvatarOption[] = [
     "src": "/avatars/Alhaitham_Icon.webp"
   },
   {
+    "id": "Alice_Icon.webp",
+    "label": "Alice Icon",
+    "src": "/avatars/Alice_Icon.webp"
+  },
+  {
     "id": "Alyosha_Icon.webp",
     "label": "Alyosha Icon",
     "src": "/avatars/Alyosha_Icon.webp"
@@ -37,6 +52,11 @@ export const AVATARS: AvatarOption[] = [
     "id": "Amber_Icon.webp",
     "label": "Amber Icon",
     "src": "/avatars/Amber_Icon.webp"
+  },
+  {
+    "id": "Arama_Icon.webp",
+    "label": "Arama Icon",
+    "src": "/avatars/Arama_Icon.webp"
   },
   {
     "id": "Arataki_Itto_Icon.webp",
@@ -117,6 +137,11 @@ export const AVATARS: AvatarOption[] = [
     "id": "Chongyun_Icon.webp",
     "label": "Chongyun Icon",
     "src": "/avatars/Chongyun_Icon.webp"
+  },
+  {
+    "id": "Chourei_Icon.webp",
+    "label": "Chourei Icon",
+    "src": "/avatars/Chourei_Icon.webp"
   },
   {
     "id": "Citlali_Icon.webp",
@@ -324,6 +349,11 @@ export const AVATARS: AvatarOption[] = [
     "src": "/avatars/Keqing_Icon.webp"
   },
   {
+    "id": "King_of_Grilled_Fish_in_Mint_Sauce_Icon.webp",
+    "label": "King of Grilled Fish in Mint Sauce Icon",
+    "src": "/avatars/King_of_Grilled_Fish_in_Mint_Sauce_Icon.webp"
+  },
+  {
     "id": "Kinich_Icon.webp",
     "label": "Kinich Icon",
     "src": "/avatars/Kinich_Icon.webp"
@@ -364,6 +394,11 @@ export const AVATARS: AvatarOption[] = [
     "src": "/avatars/Layla_Icon.webp"
   },
   {
+    "id": "Liloupar_Icon.webp",
+    "label": "Liloupar Icon",
+    "src": "/avatars/Liloupar_Icon.webp"
+  },
+  {
     "id": "Linnea_Icon.webp",
     "label": "Linnea Icon",
     "src": "/avatars/Linnea_Icon.webp"
@@ -394,6 +429,21 @@ export const AVATARS: AvatarOption[] = [
     "src": "/avatars/Lyney_Icon.webp"
   },
   {
+    "id": "Madame_Ping_Icon.webp",
+    "label": "Madame Ping Icon",
+    "src": "/avatars/Madame_Ping_Icon.webp"
+  },
+  {
+    "id": "Mamere_Icon.webp",
+    "label": "Mamere Icon",
+    "src": "/avatars/Mamere_Icon.webp"
+  },
+  {
+    "id": "Mary-Ann_Icon.webp",
+    "label": "Mary Ann Icon",
+    "src": "/avatars/Mary-Ann_Icon.webp"
+  },
+  {
     "id": "Mavuika_Icon.webp",
     "label": "Mavuika Icon",
     "src": "/avatars/Mavuika_Icon.webp"
@@ -402,6 +452,11 @@ export const AVATARS: AvatarOption[] = [
     "id": "Mika_Icon.webp",
     "label": "Mika Icon",
     "src": "/avatars/Mika_Icon.webp"
+  },
+  {
+    "id": "Mitya_Icon.webp",
+    "label": "Mitya Icon",
+    "src": "/avatars/Mitya_Icon.webp"
   },
   {
     "id": "Mona_Icon.webp",
@@ -459,9 +514,29 @@ export const AVATARS: AvatarOption[] = [
     "src": "/avatars/Odette_Icon.webp"
   },
   {
+    "id": "Oeil-de-graie_Icon.webp",
+    "label": "Oeil de graie Icon",
+    "src": "/avatars/Oeil-de-graie_Icon.webp"
+  },
+  {
     "id": "Ororon_Icon.webp",
     "label": "Ororon Icon",
     "src": "/avatars/Ororon_Icon.webp"
+  },
+  {
+    "id": "Oz_Icon.webp",
+    "label": "Oz Icon",
+    "src": "/avatars/Oz_Icon.webp"
+  },
+  {
+    "id": "Pahsiv_Icon.webp",
+    "label": "Pahsiv Icon",
+    "src": "/avatars/Pahsiv_Icon.webp"
+  },
+  {
+    "id": "Paimon_Icon.webp",
+    "label": "Paimon Icon",
+    "src": "/avatars/Paimon_Icon.webp"
   },
   {
     "id": "Pantalone_Icon.webp",
@@ -477,6 +552,11 @@ export const AVATARS: AvatarOption[] = [
     "id": "Prune_Icon.webp",
     "label": "Prune Icon",
     "src": "/avatars/Prune_Icon.webp"
+  },
+  {
+    "id": "Ptit-Gaillard_Icon.webp",
+    "label": "Ptit Gaillard Icon",
+    "src": "/avatars/Ptit-Gaillard_Icon.webp"
   },
   {
     "id": "Pulcinella_Icon.webp",
@@ -497,6 +577,11 @@ export const AVATARS: AvatarOption[] = [
     "id": "Razor_Icon.webp",
     "label": "Razor Icon",
     "src": "/avatars/Razor_Icon.webp"
+  },
+  {
+    "id": "Rerir_Icon.webp",
+    "label": "Rerir Icon",
+    "src": "/avatars/Rerir_Icon.webp"
   },
   {
     "id": "Rhinedottir_Icon.webp",
@@ -582,6 +667,16 @@ export const AVATARS: AvatarOption[] = [
     "id": "Tighnari_Icon.webp",
     "label": "Tighnari Icon",
     "src": "/avatars/Tighnari_Icon.webp"
+  },
+  {
+    "id": "Tonia_Icon.webp",
+    "label": "Tonia Icon",
+    "src": "/avatars/Tonia_Icon.webp"
+  },
+  {
+    "id": "Valeriy_Icon.webp",
+    "label": "Valeriy Icon",
+    "src": "/avatars/Valeriy_Icon.webp"
   },
   {
     "id": "Varesa_Icon.webp",
