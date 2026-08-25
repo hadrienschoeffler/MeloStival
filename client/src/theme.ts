@@ -4,8 +4,8 @@ export const THEME = {
   background: {
     // "color" = fond uni inspiré de l'icône MeloStival.
     // "image" = utilise l'image indiquée dans imageUrl avec un voile pour garder l'interface lisible.
-    mode: "color" as BackgroundMode,
-    imageUrl: "/backgrounds/background.webp",
+    mode: "image" as BackgroundMode,
+    imageUrl: "/backgrounds/windblume.webp",
   },
 };
 
