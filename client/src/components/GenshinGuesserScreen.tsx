@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { avatarSrc } from "../lib/avatars";
-import type { PublicRoom } from "../types/room";
+import type { GenshinState, PublicRoom } from "../types/room";
 import { Brand } from "./Brand";
 import { ZoomableImage } from "./ZoomableImage";
 
@@ -9,6 +9,7 @@ type GenshinAction = "advance" | "end" | "return";
 
 interface GenshinGuesserScreenProps {
   room: PublicRoom;
+  genshin: GenshinState;
   sessionId: string;
   serverTimeOffsetMs: number;
   onSubmit: (answer: string, automatic?: boolean) => Promise<void>;
@@ -22,38 +23,38 @@ const STAGE_COPY = [
   { title: "Dans quelle case ?" },
 ] as const;
 
-export function GenshinGuesserScreen({ room, sessionId, serverTimeOffsetMs, onSubmit, onAction, onAcceptAnswer }: GenshinGuesserScreenProps) {
-  const genshin = room.genshin;
+export function GenshinGuesserScreen({ room, genshin, sessionId, serverTimeOffsetMs, onSubmit, onAction, onAcceptAnswer }: GenshinGuesserScreenProps) {
   const [answer, setAnswer] = useState("");
   const [submittedAnswer, setSubmittedAnswer] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now());
+  const submissionStarted = useRef(false);
+  const actionStarted = useRef(false);
   const me = room.players.find((player) => player.sessionId === sessionId);
   const isHost = me?.role === "host";
 
   useEffect(() => {
     setAnswer("");
     setSubmittedAnswer("");
-  }, [genshin?.location.id, genshin?.stage]);
+    submissionStarted.current = false;
+  }, [genshin.location.id, genshin.stage]);
 
   useEffect(() => {
-    if (genshin?.phase !== "answering") return;
+    if (genshin.phase !== "answering") return;
     setNow(Date.now());
     const interval = window.setInterval(() => setNow(Date.now()), 250);
     return () => window.clearInterval(interval);
-  }, [genshin?.phase, genshin?.responseDeadline]);
+  }, [genshin.phase, genshin.responseDeadline]);
 
   const ranking = useMemo(
     () =>
       room.players
         .filter((player) => player.role === "participant")
-        .map((player) => ({ player, score: genshin?.scores[player.sessionId] ?? 0 }))
+        .map((player) => ({ player, score: genshin.scores[player.sessionId] ?? 0 }))
         .sort((a, b) => b.score - a.score || a.player.joinedAt - b.player.joinedAt),
-    [genshin?.scores, room.players],
+    [genshin.scores, room.players],
   );
-
-  if (!genshin) return null;
 
   const submitted = genshin.submittedSessionIds.includes(sessionId);
   const connectedParticipants = room.players.filter(
@@ -78,7 +79,8 @@ export function GenshinGuesserScreen({ room, sessionId, serverTimeOffsetMs, onSu
     const delay = Math.max(0, genshin.responseDeadline - (Date.now() + serverTimeOffsetMs));
     const timeout = window.setTimeout(() => {
       const cleanAnswer = answer.trim();
-      if (!cleanAnswer) return;
+      if (!cleanAnswer || submissionStarted.current) return;
+      submissionStarted.current = true;
       setBusy(true);
       setError(null);
       setSubmittedAnswer(cleanAnswer);
@@ -87,6 +89,7 @@ export function GenshinGuesserScreen({ room, sessionId, serverTimeOffsetMs, onSu
           setAnswer("");
         })
         .catch((submitError) => {
+          submissionStarted.current = false;
           setSubmittedAnswer("");
           setError(submitError instanceof Error ? submitError.message : "Une erreur est survenue.");
         })
@@ -96,7 +99,8 @@ export function GenshinGuesserScreen({ room, sessionId, serverTimeOffsetMs, onSu
   }, [answer, genshin.phase, genshin.responseDeadline, isHost, onSubmit, serverTimeOffsetMs, submitted]);
 
   async function run(action: () => Promise<void>) {
-    if (busy) return;
+    if (actionStarted.current) return;
+    actionStarted.current = true;
     setBusy(true);
     setError(null);
     try {
@@ -104,6 +108,7 @@ export function GenshinGuesserScreen({ room, sessionId, serverTimeOffsetMs, onSu
     } catch (actionError) {
       setError(actionError instanceof Error ? actionError.message : "Une erreur est survenue.");
     } finally {
+      actionStarted.current = false;
       setBusy(false);
     }
   }
@@ -111,11 +116,18 @@ export function GenshinGuesserScreen({ room, sessionId, serverTimeOffsetMs, onSu
   function submit(event: FormEvent) {
     event.preventDefault();
     const cleanAnswer = answer.trim();
-    if (!cleanAnswer) return;
+    if (!cleanAnswer || submissionStarted.current) return;
+    submissionStarted.current = true;
+    setSubmittedAnswer(cleanAnswer);
     void run(async () => {
-      await onSubmit(cleanAnswer);
-      setSubmittedAnswer(cleanAnswer);
-      setAnswer("");
+      try {
+        await onSubmit(cleanAnswer);
+        setAnswer("");
+      } catch (submitError) {
+        submissionStarted.current = false;
+        setSubmittedAnswer("");
+        throw submitError;
+      }
     });
   }
 

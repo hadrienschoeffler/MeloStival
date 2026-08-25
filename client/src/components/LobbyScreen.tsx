@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type { PublicRoom } from "../types/room";
 import { Brand } from "./Brand";
 import { PlayerCard } from "./PlayerCard";
@@ -22,6 +22,7 @@ export function LobbyScreen({ room, sessionId, serverConnected, onLeave, onStart
   const [startingBuzzer, setStartingBuzzer] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
   const [startingGenshin, setStartingGenshin] = useState(false);
+  const toolLaunchStarted = useRef(false);
 
   const participants = useMemo(
     () =>
@@ -54,6 +55,8 @@ export function LobbyScreen({ room, sessionId, serverConnected, onLeave, onStart
   }
 
   async function startBuzzer() {
+    if (toolLaunchStarted.current) return;
+    toolLaunchStarted.current = true;
     setStartingBuzzer(true);
     setStartError(null);
     try {
@@ -61,11 +64,14 @@ export function LobbyScreen({ room, sessionId, serverConnected, onLeave, onStart
     } catch (error) {
       setStartError(error instanceof Error ? error.message : "Impossible de lancer le buzzer.");
     } finally {
+      toolLaunchStarted.current = false;
       setStartingBuzzer(false);
     }
   }
 
   async function startGenshin() {
+    if (toolLaunchStarted.current) return;
+    toolLaunchStarted.current = true;
     setStartingGenshin(true);
     setStartError(null);
     try {
@@ -73,6 +79,7 @@ export function LobbyScreen({ room, sessionId, serverConnected, onLeave, onStart
     } catch (error) {
       setStartError(error instanceof Error ? error.message : "Impossible de lancer le Genshin Guesser.");
     } finally {
+      toolLaunchStarted.current = false;
       setStartingGenshin(false);
     }
   }

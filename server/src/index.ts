@@ -69,6 +69,23 @@ function leaveSocketRoom(socketId: string | null, roomCode: string): void {
   socket?.leave(roomCode);
 }
 
+function attachPlayerSocket(room: Room, player: Player, socketId: string): void {
+  if (player.socketId && player.socketId !== socketId) {
+    leaveSocketRoom(player.socketId, room.code);
+  }
+  player.socketId = socketId;
+  player.connected = true;
+  player.disconnectedAt = null;
+}
+
+function playerOwnsSocket(room: Room, sessionId: string, socketId: string): boolean {
+  return room.players.get(sessionId)?.socketId === socketId;
+}
+
+function hostOwnsSocket(room: Room, sessionId: string, socketId: string): boolean {
+  return room.hostSessionId === sessionId && playerOwnsSocket(room, sessionId, socketId);
+}
+
 function findPlayerRoom(sessionId: string): Room | null {
   for (const room of rooms.values()) {
     if (room.players.has(sessionId)) return room;
@@ -148,9 +165,7 @@ io.on("connection", (socket) => {
     const existingRoom = findPlayerRoom(identity.sessionId);
     if (existingRoom) {
       const existingPlayer = existingRoom.players.get(identity.sessionId)!;
-      existingPlayer.socketId = socket.id;
-      existingPlayer.connected = true;
-      existingPlayer.disconnectedAt = null;
+      attachPlayerSocket(existingRoom, existingPlayer, socket.id);
       socket.join(existingRoom.code);
       emitRoom(existingRoom);
       ack({ ok: true, room: toPublicRoom(existingRoom) });
@@ -218,9 +233,7 @@ io.on("connection", (socket) => {
 
     const existingPlayer = room.players.get(identity.sessionId);
     if (existingPlayer) {
-      existingPlayer.socketId = socket.id;
-      existingPlayer.connected = true;
-      existingPlayer.disconnectedAt = null;
+      attachPlayerSocket(room, existingPlayer, socket.id);
       socket.join(room.code);
       emitRoom(room);
       ack({ ok: true, room: toPublicRoom(room) });
@@ -269,14 +282,7 @@ io.on("connection", (socket) => {
       return;
     }
 
-    if (player.socketId && player.socketId !== socket.id) {
-      const previousSocket = io.sockets.sockets.get(player.socketId);
-      previousSocket?.leave(room.code);
-    }
-
-    player.socketId = socket.id;
-    player.connected = true;
-    player.disconnectedAt = null;
+    attachPlayerSocket(room, player, socket.id);
     socket.join(room.code);
     emitRoom(room);
     ack({ ok: true, room: toPublicRoom(room) });
@@ -295,6 +301,10 @@ io.on("connection", (socket) => {
       ack({ ok: true, room: { code: roomCode, status: "lobby", currentTool: null, hostSessionId: "", players: [], buzzer: null, genshin: null } });
       return;
     }
+    if (!playerOwnsSocket(room, sessionId, socket.id)) {
+      ack({ ok: false, error: "Cette session n'est plus active sur cet appareil." });
+      return;
+    }
 
     removePlayer(room, sessionId);
     socket.leave(roomCode);
@@ -304,13 +314,14 @@ io.on("connection", (socket) => {
   socket.on("buzzer:start", (rawPayload: Record<string, unknown>, ack: Ack) => {
     const sessionId = rawPayload.sessionId;
     const room = rooms.get(normalizeRoomCode(rawPayload.roomCode));
-    if (!isValidSessionId(sessionId) || !room || room.hostSessionId !== sessionId) {
+    if (!isValidSessionId(sessionId) || !room || !hostOwnsSocket(room, sessionId, socket.id)) {
       ack({ ok: false, error: "Seul l'Host peut lancer le buzzer." });
       return;
     }
 
     room.status = "playing";
     room.currentTool = "buzzer";
+    room.genshin = null;
     room.buzzer = {
       phase: "open",
       buzzedSessionId: null,
@@ -331,7 +342,7 @@ io.on("connection", (socket) => {
     const sessionId = rawPayload.sessionId;
     const room = rooms.get(normalizeRoomCode(rawPayload.roomCode));
     const player = isValidSessionId(sessionId) ? room?.players.get(sessionId) : null;
-    if (!room || !player || player.role !== "participant") {
+    if (!room || !player || player.role !== "participant" || player.socketId !== socket.id) {
       ack({ ok: false, error: "Seuls les participants peuvent buzzer." });
       return;
     }
@@ -354,7 +365,7 @@ io.on("connection", (socket) => {
   socket.on("buzzer:reset", (rawPayload: Record<string, unknown>, ack: Ack) => {
     const sessionId = rawPayload.sessionId;
     const room = rooms.get(normalizeRoomCode(rawPayload.roomCode));
-    if (!isValidSessionId(sessionId) || !room || room.hostSessionId !== sessionId || !room.buzzer) {
+    if (!isValidSessionId(sessionId) || !room || !hostOwnsSocket(room, sessionId, socket.id) || !room.buzzer) {
       ack({ ok: false, error: "Action réservée à l'Host." });
       return;
     }
@@ -371,7 +382,7 @@ io.on("connection", (socket) => {
   socket.on("buzzer:award", (rawPayload: Record<string, unknown>, ack: Ack) => {
     const sessionId = rawPayload.sessionId;
     const room = rooms.get(normalizeRoomCode(rawPayload.roomCode));
-    if (!isValidSessionId(sessionId) || !room || room.hostSessionId !== sessionId || !room.buzzer) {
+    if (!isValidSessionId(sessionId) || !room || !hostOwnsSocket(room, sessionId, socket.id) || !room.buzzer) {
       ack({ ok: false, error: "Action réservée à l'Host." });
       return;
     }
@@ -394,7 +405,7 @@ io.on("connection", (socket) => {
   socket.on("buzzer:next", (rawPayload: Record<string, unknown>, ack: Ack) => {
     const sessionId = rawPayload.sessionId;
     const room = rooms.get(normalizeRoomCode(rawPayload.roomCode));
-    if (!isValidSessionId(sessionId) || !room || room.hostSessionId !== sessionId || !room.buzzer) {
+    if (!isValidSessionId(sessionId) || !room || !hostOwnsSocket(room, sessionId, socket.id) || !room.buzzer) {
       ack({ ok: false, error: "Action réservée à l'Host." });
       return;
     }
@@ -410,7 +421,7 @@ io.on("connection", (socket) => {
   socket.on("buzzer:end", (rawPayload: Record<string, unknown>, ack: Ack) => {
     const sessionId = rawPayload.sessionId;
     const room = rooms.get(normalizeRoomCode(rawPayload.roomCode));
-    if (!isValidSessionId(sessionId) || !room || room.hostSessionId !== sessionId || !room.buzzer) {
+    if (!isValidSessionId(sessionId) || !room || !hostOwnsSocket(room, sessionId, socket.id) || !room.buzzer) {
       ack({ ok: false, error: "Action réservée à l'Host." });
       return;
     }
@@ -424,7 +435,7 @@ io.on("connection", (socket) => {
   socket.on("buzzer:return", (rawPayload: Record<string, unknown>, ack: Ack) => {
     const sessionId = rawPayload.sessionId;
     const room = rooms.get(normalizeRoomCode(rawPayload.roomCode));
-    if (!isValidSessionId(sessionId) || !room || room.hostSessionId !== sessionId || !room.buzzer) {
+    if (!isValidSessionId(sessionId) || !room || !hostOwnsSocket(room, sessionId, socket.id) || !room.buzzer) {
       ack({ ok: false, error: "Action réservée à l'Host." });
       return;
     }
@@ -439,7 +450,7 @@ io.on("connection", (socket) => {
   socket.on("genshin:start", (rawPayload: Record<string, unknown>, ack: Ack) => {
     const sessionId = rawPayload.sessionId;
     const room = rooms.get(normalizeRoomCode(rawPayload.roomCode));
-    if (!isValidSessionId(sessionId) || !room || room.hostSessionId !== sessionId) {
+    if (!isValidSessionId(sessionId) || !room || !hostOwnsSocket(room, sessionId, socket.id)) {
       ack({ ok: false, error: "Seul l'Host peut lancer le Genshin Guesser." });
       return;
     }
@@ -500,7 +511,7 @@ io.on("connection", (socket) => {
 
     const answers = room.genshin.responses[player.sessionId] ?? [null, null, null];
     if (answers[room.genshin.stage]) {
-      ack({ ok: false, error: "Tu as déjà répondu à cette question." });
+      ack({ ok: true, room: toPublicRoom(room) });
       return;
     }
 
@@ -518,7 +529,7 @@ io.on("connection", (socket) => {
   socket.on("genshin:advance", (rawPayload: Record<string, unknown>, ack: Ack) => {
     const sessionId = rawPayload.sessionId;
     const room = rooms.get(normalizeRoomCode(rawPayload.roomCode));
-    if (!isValidSessionId(sessionId) || !room || room.hostSessionId !== sessionId || !room.genshin) {
+    if (!isValidSessionId(sessionId) || !room || !hostOwnsSocket(room, sessionId, socket.id) || !room.genshin) {
       ack({ ok: false, error: "Action réservée à l'Host." });
       return;
     }
@@ -556,7 +567,7 @@ io.on("connection", (socket) => {
       !isValidSessionId(sessionId) ||
       !isValidSessionId(targetSessionId) ||
       !room ||
-      room.hostSessionId !== sessionId ||
+      !hostOwnsSocket(room, sessionId, socket.id) ||
       !room.genshin ||
       room.genshin.phase !== "recap"
     ) {
@@ -590,7 +601,7 @@ io.on("connection", (socket) => {
   socket.on("genshin:end", (rawPayload: Record<string, unknown>, ack: Ack) => {
     const sessionId = rawPayload.sessionId;
     const room = rooms.get(normalizeRoomCode(rawPayload.roomCode));
-    if (!isValidSessionId(sessionId) || !room || room.hostSessionId !== sessionId || !room.genshin) {
+    if (!isValidSessionId(sessionId) || !room || !hostOwnsSocket(room, sessionId, socket.id) || !room.genshin) {
       ack({ ok: false, error: "Action réservée à l'Host." });
       return;
     }
@@ -602,7 +613,7 @@ io.on("connection", (socket) => {
   socket.on("genshin:return", (rawPayload: Record<string, unknown>, ack: Ack) => {
     const sessionId = rawPayload.sessionId;
     const room = rooms.get(normalizeRoomCode(rawPayload.roomCode));
-    if (!isValidSessionId(sessionId) || !room || room.hostSessionId !== sessionId || !room.genshin) {
+    if (!isValidSessionId(sessionId) || !room || !hostOwnsSocket(room, sessionId, socket.id) || !room.genshin) {
       ack({ ok: false, error: "Action réservée à l'Host." });
       return;
     }

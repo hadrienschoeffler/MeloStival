@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { avatarSrc } from "../lib/avatars";
 import type { PublicRoom } from "../types/room";
 import { Brand } from "./Brand";
@@ -13,6 +13,7 @@ interface BuzzerScreenProps {
 export function BuzzerScreen({ room, sessionId, serverConnected, onAction }: BuzzerScreenProps) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const actionStarted = useRef(false);
   const buzzer = room.buzzer;
   const me = room.players.find((player) => player.sessionId === sessionId);
   const isHost = me?.role === "host";
@@ -53,7 +54,8 @@ export function BuzzerScreen({ room, sessionId, serverConnected, onAction }: Buz
   if (!buzzer) return null;
 
   async function act(action: "buzz" | "reset" | "award" | "next" | "end" | "return") {
-    if (busy) return;
+    if (actionStarted.current) return;
+    actionStarted.current = true;
     setBusy(true);
     setError(null);
     try {
@@ -61,6 +63,7 @@ export function BuzzerScreen({ room, sessionId, serverConnected, onAction }: Buz
     } catch (actionError) {
       setError(actionError instanceof Error ? actionError.message : "Une erreur est survenue.");
     } finally {
+      actionStarted.current = false;
       setBusy(false);
     }
   }

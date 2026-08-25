@@ -1,6 +1,6 @@
 import { randomInt } from "node:crypto";
 import { GENSHIN_LOCATIONS, getGenshinAnswerPoints } from "./genshin-content.js";
-import type { Player, PublicRoom, Room } from "./types.js";
+import type { PublicRoom, Room } from "./types.js";
 
 const ROOM_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const ROOM_CODE_LENGTH = 6;
@@ -120,20 +120,4 @@ export function nicknameIsAvailable(room: Room, nickname: string, exceptSessionI
 
 export function roomHasCapacity(room: Room): boolean {
   return room.players.size < MAX_PLAYERS;
-}
-
-export function chooseNewHost(room: Room): Player | null {
-  const candidates = [...room.players.values()].sort((a, b) => {
-    if (a.connected !== b.connected) return a.connected ? -1 : 1;
-    return a.joinedAt - b.joinedAt;
-  });
-
-  const next = candidates[0] ?? null;
-  if (!next) return null;
-
-  for (const player of room.players.values()) {
-    player.role = player.sessionId === next.sessionId ? "host" : "participant";
-  }
-  room.hostSessionId = next.sessionId;
-  return next;
 }

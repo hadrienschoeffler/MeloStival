@@ -190,12 +190,11 @@ function App() {
     setRoom(result.room);
   }
 
-  async function genshinAction(action: "start" | "advance" | "end" | "return", answer?: string) {
+  async function genshinAction(action: "start" | "advance" | "end" | "return") {
     if (!room) return;
     const result = await emitWithAck(`genshin:${action}`, {
       sessionId,
       roomCode: room.code,
-      ...(answer === undefined ? {} : { answer }),
     });
     if (!result.ok) throw new Error(result.error);
     setRoom(result.room);
@@ -235,6 +234,7 @@ function App() {
       return (
         <GenshinGuesserScreen
           room={room}
+          genshin={room.genshin}
           sessionId={sessionId}
           serverTimeOffsetMs={serverTimeOffsetMs}
           onSubmit={submitGenshinAnswer}
