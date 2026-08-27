@@ -3,6 +3,7 @@ import cors from "cors";
 import express from "express";
 import { Server } from "socket.io";
 import { GENSHIN_LOCATIONS, getGenshinAnswerPoints } from "./genshin-content.js";
+import { crosswordCellExists, crosswordIsSolved, getCrosswordScore } from "./crossword-content.js";
 import {
   createRoomCode,
   isValidAvatarId,
@@ -20,6 +21,7 @@ const PORT = Number(process.env.PORT ?? 3001);
 const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN ?? "http://localhost:5173";
 const DISCONNECT_GRACE_MS = Number(process.env.ROOM_DISCONNECT_GRACE_MS ?? 30 * 60 * 1000);
 const GENSHIN_STAGE_DURATIONS_MS = [30_000, 30_000, 45_000] as const;
+const CROSSWORD_DURATION_MS = 10 * 60 * 1000;
 
 const app = express();
 app.use(cors({ origin: CLIENT_ORIGIN }));
@@ -39,6 +41,16 @@ type Ack = (result: RoomActionResult) => void;
 
 function emitRoom(room: Room): void {
   io.to(room.code).emit("room:state", toPublicRoom(room));
+  if (room.crossword) {
+    for (const player of room.players.values()) {
+      if (player.role !== "participant" || !player.socketId) continue;
+      io.to(player.socketId).emit("crossword:private-state", {
+        letters: room.crossword.lettersBySession[player.sessionId] ?? {},
+        completed: room.crossword.completedSessionIds.includes(player.sessionId),
+        revision: room.crossword.revision,
+      });
+    }
+  }
 }
 
 function emitRoomAvailability(): void {
@@ -61,6 +73,27 @@ function scheduleGenshinDeadline(room: Room): void {
     // du passage au récapitulatif.
     emitRoom(currentRoom);
   }, Math.max(0, deadline - Date.now())).unref();
+}
+
+function scheduleCrosswordDeadline(room: Room): void {
+  const deadline = room.crossword?.responseDeadline;
+  if (!deadline) return;
+  setTimeout(() => {
+    const currentRoom = rooms.get(room.code);
+    if (!currentRoom?.crossword || currentRoom.crossword.phase !== "playing" || currentRoom.crossword.responseDeadline !== deadline) return;
+    finishCrossword(currentRoom);
+    emitRoom(currentRoom);
+  }, Math.max(0, deadline - Date.now())).unref();
+}
+
+function finishCrossword(room: Room): void {
+  if (!room.crossword) return;
+  room.crossword.phase = "results";
+  room.crossword.scores = Object.fromEntries(
+    [...room.players.values()]
+      .filter((player) => player.role === "participant")
+      .map((player) => [player.sessionId, getCrosswordScore(room.crossword!.lettersBySession[player.sessionId] ?? {})]),
+  );
 }
 
 function leaveSocketRoom(socketId: string | null, roomCode: string): void {
@@ -202,6 +235,7 @@ io.on("connection", (socket) => {
       players: new Map([[host.sessionId, host]]),
       buzzer: null,
       genshin: null,
+      crossword: null,
       createdAt: now,
     };
 
@@ -298,7 +332,7 @@ io.on("connection", (socket) => {
 
     const room = rooms.get(roomCode);
     if (!room || !room.players.has(sessionId)) {
-      ack({ ok: true, room: { code: roomCode, status: "lobby", currentTool: null, hostSessionId: "", players: [], buzzer: null, genshin: null } });
+      ack({ ok: true, room: { code: roomCode, status: "lobby", currentTool: null, hostSessionId: "", players: [], buzzer: null, genshin: null, crossword: null } });
       return;
     }
     if (!playerOwnsSocket(room, sessionId, socket.id)) {
@@ -308,7 +342,7 @@ io.on("connection", (socket) => {
 
     removePlayer(room, sessionId);
     socket.leave(roomCode);
-    ack({ ok: true, room: room.players.size > 0 ? toPublicRoom(room) : { code: roomCode, status: "lobby", currentTool: null, hostSessionId: "", players: [], buzzer: null, genshin: null } });
+    ack({ ok: true, room: room.players.size > 0 ? toPublicRoom(room) : { code: roomCode, status: "lobby", currentTool: null, hostSessionId: "", players: [], buzzer: null, genshin: null, crossword: null } });
   });
 
   socket.on("buzzer:start", (rawPayload: Record<string, unknown>, ack: Ack) => {
@@ -322,6 +356,7 @@ io.on("connection", (socket) => {
     room.status = "playing";
     room.currentTool = "buzzer";
     room.genshin = null;
+    room.crossword = null;
     room.buzzer = {
       phase: "open",
       buzzedSessionId: null,
@@ -462,6 +497,7 @@ io.on("connection", (socket) => {
     room.status = "playing";
     room.currentTool = "genshin-guesser";
     room.buzzer = null;
+    room.crossword = null;
     const initialScores = Object.fromEntries(
       [...room.players.values()]
         .filter((player) => player.role === "participant")
@@ -620,6 +656,102 @@ io.on("connection", (socket) => {
     room.status = "lobby";
     room.currentTool = null;
     room.genshin = null;
+    emitRoom(room);
+    ack({ ok: true, room: toPublicRoom(room) });
+  });
+
+  socket.on("crossword:start", (rawPayload: Record<string, unknown>, ack: Ack) => {
+    const sessionId = rawPayload.sessionId;
+    const room = rooms.get(normalizeRoomCode(rawPayload.roomCode));
+    if (!isValidSessionId(sessionId) || !room || !hostOwnsSocket(room, sessionId, socket.id)) {
+      ack({ ok: false, error: "Seul l'Host peut lancer les mots croisés." });
+      return;
+    }
+
+    room.status = "playing";
+    room.currentTool = "crossword";
+    room.buzzer = null;
+    room.genshin = null;
+    room.crossword = {
+      phase: "playing",
+      responseDeadline: Date.now() + CROSSWORD_DURATION_MS,
+      lettersBySession: {},
+      completedSessionIds: [],
+      scores: {},
+      revision: 0,
+    };
+    scheduleCrosswordDeadline(room);
+    emitRoom(room);
+    ack({ ok: true, room: toPublicRoom(room) });
+  });
+
+  socket.on("crossword:set-letter", (rawPayload: Record<string, unknown>, ack: Ack) => {
+    const sessionId = rawPayload.sessionId;
+    const room = rooms.get(normalizeRoomCode(rawPayload.roomCode));
+    const player = isValidSessionId(sessionId) ? room?.players.get(sessionId) : null;
+    const row = Number(rawPayload.row);
+    const column = Number(rawPayload.column);
+    const letter = typeof rawPayload.letter === "string"
+      ? rawPayload.letter.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase()
+      : "";
+    if (!room || !player || player.role !== "participant" || player.socketId !== socket.id) {
+      ack({ ok: false, error: "Seuls les participants peuvent remplir la grille." });
+      return;
+    }
+    if (room.currentTool !== "crossword" || !room.crossword || room.crossword.phase !== "playing") {
+      ack({ ok: false, error: "Cette grille n'est plus modifiable." });
+      return;
+    }
+    if (!Number.isInteger(row) || !Number.isInteger(column) || !crosswordCellExists(row, column)) {
+      ack({ ok: false, error: "Case invalide." });
+      return;
+    }
+    if (letter !== "" && !/^[A-Z]$/.test(letter)) {
+      ack({ ok: false, error: "Lettre invalide." });
+      return;
+    }
+
+    const key = `${row}:${column}`;
+    const letters = room.crossword.lettersBySession[player.sessionId] ?? {};
+    if (letter) letters[key] = letter;
+    else delete letters[key];
+    room.crossword.lettersBySession[player.sessionId] = letters;
+    room.crossword.revision += 1;
+    const completedIndex = room.crossword.completedSessionIds.indexOf(player.sessionId);
+    if (crosswordIsSolved(letters) && completedIndex === -1) room.crossword.completedSessionIds.push(player.sessionId);
+    else if (!crosswordIsSolved(letters) && completedIndex !== -1) room.crossword.completedSessionIds.splice(completedIndex, 1);
+    emitRoom(room);
+    ack({ ok: true, room: toPublicRoom(room) });
+  });
+
+  socket.on("crossword:end", (rawPayload: Record<string, unknown>, ack: Ack) => {
+    const sessionId = rawPayload.sessionId;
+    const room = rooms.get(normalizeRoomCode(rawPayload.roomCode));
+    if (
+      !isValidSessionId(sessionId) ||
+      !room ||
+      !hostOwnsSocket(room, sessionId, socket.id) ||
+      !room.crossword ||
+      room.crossword.phase !== "playing"
+    ) {
+      ack({ ok: false, error: "Action réservée à l'Host." });
+      return;
+    }
+    finishCrossword(room);
+    emitRoom(room);
+    ack({ ok: true, room: toPublicRoom(room) });
+  });
+
+  socket.on("crossword:return", (rawPayload: Record<string, unknown>, ack: Ack) => {
+    const sessionId = rawPayload.sessionId;
+    const room = rooms.get(normalizeRoomCode(rawPayload.roomCode));
+    if (!isValidSessionId(sessionId) || !room || !hostOwnsSocket(room, sessionId, socket.id) || !room.crossword) {
+      ack({ ok: false, error: "Action réservée à l'Host." });
+      return;
+    }
+    room.status = "lobby";
+    room.currentTool = null;
+    room.crossword = null;
     emitRoom(room);
     ack({ ok: true, room: toPublicRoom(room) });
   });

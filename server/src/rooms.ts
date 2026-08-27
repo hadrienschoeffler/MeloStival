@@ -1,5 +1,6 @@
 import { randomInt } from "node:crypto";
 import { GENSHIN_LOCATIONS, getGenshinAnswerPoints } from "./genshin-content.js";
+import { CROSSWORD_COLUMNS, CROSSWORD_ROWS, CROSSWORD_WORDS } from "./crossword-content.js";
 import type { PublicRoom, Room } from "./types.js";
 
 const ROOM_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -40,7 +41,7 @@ export function createRoomCode(): string {
   throw new Error("Impossible de générer un code de salon unique.");
 }
 
-export function toPublicRoom(room: Room): PublicRoom {
+export function toPublicRoom(room: Room, viewerSessionId?: string): PublicRoom {
   const genshinLocation = room.genshin ? GENSHIN_LOCATIONS[room.genshin.locationIndex] : null;
   const showGenshinAnswers = room.genshin?.phase === "recap" || room.genshin?.phase === "results";
   const genshin = room.genshin && genshinLocation
@@ -99,6 +100,21 @@ export function toPublicRoom(room: Room): PublicRoom {
     hostSessionId: room.hostSessionId,
     buzzer: room.buzzer,
     genshin,
+    crossword: room.crossword
+      ? {
+          phase: room.crossword.phase,
+          responseDeadline: room.crossword.responseDeadline,
+          letters: viewerSessionId === room.hostSessionId
+            ? {}
+            : { ...(viewerSessionId ? room.crossword.lettersBySession[viewerSessionId] : {}) },
+          completed: Boolean(viewerSessionId && room.crossword.completedSessionIds.includes(viewerSessionId)),
+          scores: room.crossword.scores,
+          revision: room.crossword.revision,
+          rows: CROSSWORD_ROWS,
+          columns: CROSSWORD_COLUMNS,
+          words: CROSSWORD_WORDS.map(({ answer, ...word }) => ({ ...word, length: answer.length })),
+        }
+      : null,
     players: [...room.players.values()].map((player) => ({
       sessionId: player.sessionId,
       nickname: player.nickname,

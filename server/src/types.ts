@@ -1,5 +1,5 @@
 export type PlayerRole = "host" | "participant";
-export type ToolId = "buzzer" | "genshin-guesser";
+export type ToolId = "buzzer" | "genshin-guesser" | "crossword";
 
 export interface Player {
   sessionId: string;
@@ -20,6 +20,7 @@ export interface Room {
   players: Map<string, Player>;
   buzzer: BuzzerState | null;
   genshin: GenshinState | null;
+  crossword: CrosswordState | null;
   createdAt: number;
 }
 
@@ -41,6 +42,37 @@ export interface GenshinState {
   revealedScores: Record<string, number>;
   responses: Record<string, Array<string | null>>;
   acceptedOverrides: Record<string, boolean[]>;
+}
+
+export interface CrosswordState {
+  phase: "playing" | "results";
+  responseDeadline: number;
+  lettersBySession: Record<string, Record<string, string>>;
+  completedSessionIds: string[];
+  scores: Record<string, number>;
+  revision: number;
+}
+
+export interface PublicCrosswordWord {
+  id: string;
+  number: number;
+  clue: string;
+  row: number;
+  column: number;
+  length: number;
+  direction: "across" | "down";
+}
+
+export interface PublicCrosswordState {
+  phase: CrosswordState["phase"];
+  responseDeadline: number;
+  letters: Record<string, string>;
+  completed: boolean;
+  scores: Record<string, number>;
+  revision: number;
+  rows: number;
+  columns: number;
+  words: PublicCrosswordWord[];
 }
 
 export interface PublicGenshinLocation {
@@ -89,6 +121,7 @@ export interface PublicRoom {
   players: PublicPlayer[];
   buzzer: BuzzerState | null;
   genshin: PublicGenshinState | null;
+  crossword: PublicCrosswordState | null;
 }
 
 export type RoomActionResult =

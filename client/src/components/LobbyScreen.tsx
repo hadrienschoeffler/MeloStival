@@ -10,9 +10,10 @@ interface LobbyScreenProps {
   onLeave: () => Promise<void>;
   onStartBuzzer: (oncePerQuestion: boolean) => Promise<void>;
   onStartGenshin: () => Promise<void>;
+  onStartCrossword: () => Promise<void>;
 }
 
-export function LobbyScreen({ room, sessionId, serverConnected, onLeave, onStartBuzzer, onStartGenshin }: LobbyScreenProps) {
+export function LobbyScreen({ room, sessionId, serverConnected, onLeave, onStartBuzzer, onStartGenshin, onStartCrossword }: LobbyScreenProps) {
   const me = room.players.find((player) => player.sessionId === sessionId);
   const host = room.players.find((player) => player.sessionId === room.hostSessionId);
   const isHost = me?.role === "host";
@@ -22,6 +23,7 @@ export function LobbyScreen({ room, sessionId, serverConnected, onLeave, onStart
   const [startingBuzzer, setStartingBuzzer] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
   const [startingGenshin, setStartingGenshin] = useState(false);
+  const [startingCrossword, setStartingCrossword] = useState(false);
   const toolLaunchStarted = useRef(false);
 
   const participants = useMemo(
@@ -81,6 +83,21 @@ export function LobbyScreen({ room, sessionId, serverConnected, onLeave, onStart
     } finally {
       toolLaunchStarted.current = false;
       setStartingGenshin(false);
+    }
+  }
+
+  async function startCrossword() {
+    if (toolLaunchStarted.current) return;
+    toolLaunchStarted.current = true;
+    setStartingCrossword(true);
+    setStartError(null);
+    try {
+      await onStartCrossword();
+    } catch (error) {
+      setStartError(error instanceof Error ? error.message : "Impossible de lancer les mots croisés.");
+    } finally {
+      toolLaunchStarted.current = false;
+      setStartingCrossword(false);
     }
   }
 
@@ -160,6 +177,10 @@ export function LobbyScreen({ room, sessionId, serverConnected, onLeave, onStart
                 <button className="tool-card" type="button" disabled={startingGenshin} onClick={() => void startGenshin()}>
                   <span className="tool-icon">02</span>
                   <strong>Genshin Guesser</strong>
+                </button>
+                <button className="tool-card" type="button" disabled={startingCrossword} onClick={() => void startCrossword()}>
+                  <span className="tool-icon">03</span>
+                  <strong>Mots croisés</strong>
                 </button>
               </div>
               {startError && !showBuzzerSetup && <div className="form-error tool-error">{startError}</div>}

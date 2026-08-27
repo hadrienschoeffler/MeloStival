@@ -255,7 +255,7 @@ export function GenshinGuesserScreen({ room, genshin, sessionId, serverTimeOffse
           </div>
           <div className="guesser-timer-row">
             <span className={`guesser-timer ${remainingSeconds <= 10 ? "ending" : ""}`} aria-live="polite">
-              Timer : {remainingSeconds} s
+              Temps restant : {remainingSeconds} s
             </span>
           </div>
           {!isHost && (

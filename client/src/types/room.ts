@@ -12,11 +12,12 @@ export interface PublicPlayer {
 export interface PublicRoom {
   code: string;
   status: "lobby" | "playing";
-  currentTool: null | "buzzer" | "genshin-guesser";
+  currentTool: null | "buzzer" | "genshin-guesser" | "crossword";
   hostSessionId: string;
   players: PublicPlayer[];
   buzzer: BuzzerState | null;
   genshin: GenshinState | null;
+  crossword: CrosswordState | null;
 }
 
 export interface BuzzerState {
@@ -55,6 +56,28 @@ export interface GenshinState {
   submittedSessionIds: string[];
   correctAnswer: string | null;
   recap: GenshinRecapEntry[] | null;
+}
+
+export interface CrosswordWord {
+  id: string;
+  number: number;
+  clue: string;
+  row: number;
+  column: number;
+  length: number;
+  direction: "across" | "down";
+}
+
+export interface CrosswordState {
+  phase: "playing" | "results";
+  responseDeadline: number;
+  rows: number;
+  columns: number;
+  words: CrosswordWord[];
+  letters: Record<string, string>;
+  completed: boolean;
+  scores: Record<string, number>;
+  revision: number;
 }
 
 export type RoomActionResult =

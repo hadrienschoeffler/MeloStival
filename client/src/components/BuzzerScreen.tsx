@@ -107,7 +107,14 @@ export function BuzzerScreen({ room, sessionId, serverConnected, onAction }: Buz
           <h1 className="page-title">Buzzer</h1>
           <p className="question-number">Question {buzzer.questionNumber}</p>
         </div>
-        {!serverConnected && <div className="connection-chip">Reconnexion…</div>}
+        <div className="header-actions">
+          {!serverConnected && <div className="connection-chip">Reconnexion…</div>}
+          {isHost && (
+            <button className="ghost-button danger" type="button" disabled={busy} onClick={() => void act("end")}>
+              Fin de partie
+            </button>
+          )}
+        </div>
       </header>
 
       <div className="buzzer-layout">
@@ -165,9 +172,6 @@ export function BuzzerScreen({ room, sessionId, serverConnected, onAction }: Buz
               )}
               <button className="ghost-button" type="button" disabled={busy} onClick={() => void act("next")}>
                 Question suivante
-              </button>
-              <button className="ghost-button danger" type="button" disabled={busy} onClick={() => void act("end")}>
-                Fin de partie
               </button>
             </div>
           )}

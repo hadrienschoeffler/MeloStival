@@ -3,6 +3,7 @@ import { HomeScreen } from "./components/HomeScreen";
 import { LobbyScreen } from "./components/LobbyScreen";
 import { BuzzerScreen } from "./components/BuzzerScreen";
 import { GenshinGuesserScreen } from "./components/GenshinGuesserScreen";
+import { CrosswordScreen } from "./components/Crossword";
 import { clearLastRoomCode, getLastRoomCode, getOrCreateSessionId, saveLastRoomCode } from "./lib/session";
 import { socket } from "./lib/socket";
 import type { PublicRoom, RoomActionResult } from "./types/room";
@@ -29,6 +30,7 @@ function App() {
   const [canCreateRoom, setCanCreateRoom] = useState(true);
   const [serverTimeOffsetMs, setServerTimeOffsetMs] = useState(0);
   const [connectionError, setConnectionError] = useState<string | null>(null);
+  const [crosswordPrivate, setCrosswordPrivate] = useState<{ letters: Record<string, string>; completed: boolean }>({ letters: {}, completed: false });
 
   const tryResume = useCallback(async () => {
     const lastRoomCode = getLastRoomCode();
@@ -111,12 +113,17 @@ function App() {
       setCanCreateRoom(result.canCreate);
     }
 
+    function onCrosswordPrivateState(result: { letters: Record<string, string>; completed: boolean }) {
+      setCrosswordPrivate({ letters: result.letters, completed: result.completed });
+    }
+
     socket.on("connect", onConnect);
     socket.on("disconnect", onDisconnect);
     socket.on("connect_error", onConnectError);
     socket.on("room:state", onRoomState);
     socket.on("room:closed", onRoomClosed);
     socket.on("room:availability", onRoomAvailability);
+    socket.on("crossword:private-state", onCrosswordPrivateState);
 
     if (!socket.connected) {
       socket.connect();
@@ -133,6 +140,7 @@ function App() {
       socket.off("room:state", onRoomState);
       socket.off("room:closed", onRoomClosed);
       socket.off("room:availability", onRoomAvailability);
+      socket.off("crossword:private-state", onCrosswordPrivateState);
     };
   }, [refreshRoomAvailability, syncServerTime, tryResume]);
 
@@ -218,6 +226,26 @@ function App() {
     setRoom(result.room);
   }
 
+  async function crosswordAction(action: "start" | "end" | "return") {
+    if (!room) return;
+    const result = await emitWithAck(`crossword:${action}`, { sessionId, roomCode: room.code });
+    if (!result.ok) throw new Error(result.error);
+    setRoom(result.room);
+  }
+
+  async function setCrosswordLetter(row: number, column: number, letter: string) {
+    if (!room) return;
+    const result = await emitWithAck("crossword:set-letter", {
+      sessionId,
+      roomCode: room.code,
+      row,
+      column,
+      letter,
+    });
+    if (!result.ok) throw new Error(result.error);
+    setRoom(result.room);
+  }
+
   if (room) {
     if (room.currentTool === "buzzer" && room.buzzer) {
       return (
@@ -244,6 +272,23 @@ function App() {
       );
     }
 
+    if (room.currentTool === "crossword" && room.crossword) {
+      return (
+        <CrosswordScreen
+          room={room}
+          crossword={room.crossword}
+          privateLetters={crosswordPrivate.letters}
+          completed={crosswordPrivate.completed}
+          sessionId={sessionId}
+          serverConnected={serverConnected}
+          serverTimeOffsetMs={serverTimeOffsetMs}
+          onLetter={setCrosswordLetter}
+          onEnd={() => crosswordAction("end")}
+          onReturn={() => crosswordAction("return")}
+        />
+      );
+    }
+
     return (
       <LobbyScreen
         room={room}
@@ -252,6 +297,7 @@ function App() {
         onLeave={leaveRoom}
         onStartBuzzer={(oncePerQuestion) => buzzerAction("start", { oncePerQuestion })}
         onStartGenshin={() => genshinAction("start")}
+        onStartCrossword={() => crosswordAction("start")}
       />
     );
   }
