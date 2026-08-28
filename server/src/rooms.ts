@@ -92,6 +92,21 @@ export function toPublicRoom(room: Room, viewerSessionId?: string): PublicRoom {
           : null,
       }
     : null;
+  const crosswordReviewWords = [...CROSSWORD_WORDS].sort(
+    (left, right) => left.number - right.number || left.direction.localeCompare(right.direction),
+  );
+  const revealedCrosswordWords = room.crossword?.phase === "results"
+    ? crosswordReviewWords
+    : crosswordReviewWords.slice(0, room.crossword?.reviewIndex ?? 0);
+  const correctionLetters = Object.fromEntries(
+    revealedCrosswordWords.flatMap((word) =>
+      [...word.answer].map((letter, index) => {
+        const row = word.row + (word.direction === "down" ? index : 0);
+        const column = word.column + (word.direction === "across" ? index : 0);
+        return [`${row}:${column}`, letter];
+      }),
+    ),
+  );
 
   return {
     code: room.code,
@@ -109,6 +124,11 @@ export function toPublicRoom(room: Room, viewerSessionId?: string): PublicRoom {
             : { ...(viewerSessionId ? room.crossword.lettersBySession[viewerSessionId] : {}) },
           completed: Boolean(viewerSessionId && room.crossword.completedSessionIds.includes(viewerSessionId)),
           scores: room.crossword.scores,
+          reviewIndex: room.crossword.reviewIndex,
+          correctionLetters,
+          activeWordId: room.crossword.phase === "review" && room.crossword.reviewIndex > 0
+            ? crosswordReviewWords[room.crossword.reviewIndex - 1]?.id ?? null
+            : null,
           revision: room.crossword.revision,
           rows: CROSSWORD_ROWS,
           columns: CROSSWORD_COLUMNS,

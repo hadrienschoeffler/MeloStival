@@ -14,6 +14,7 @@ interface CrosswordScreenProps {
   serverTimeOffsetMs: number;
   onLetter: (row: number, column: number, letter: string) => Promise<void>;
   onEnd: () => Promise<void>;
+  onAdvance: () => Promise<void>;
   onReturn: () => Promise<void>;
 }
 
@@ -35,7 +36,7 @@ function cellsForWord(word: CrosswordWord) {
   }));
 }
 
-export function CrosswordScreen({ room, crossword, privateLetters, sessionId, serverConnected, serverTimeOffsetMs, onLetter, onEnd, onReturn }: CrosswordScreenProps) {
+export function CrosswordScreen({ room, crossword, privateLetters, sessionId, serverConnected, serverTimeOffsetMs, onLetter, onEnd, onAdvance, onReturn }: CrosswordScreenProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const pendingRef = useRef(new Map<string, string>());
   const [selectedCell, setSelectedCell] = useState<string | null>(null);
@@ -69,12 +70,15 @@ export function CrosswordScreen({ room, crossword, privateLetters, sessionId, se
     return result;
   }, [crossword.words]);
 
-  const selectedWord = crossword.words.find((word) => word.id === selectedWordId) ?? null;
+  const highlightedWordId = crossword.phase === "review" ? crossword.activeWordId : selectedWordId;
+  const selectedWord = crossword.words.find((word) => word.id === highlightedWordId) ?? null;
   const selectedWordCells = useMemo(
     () => new Set(selectedWord ? cellsForWord(selectedWord).map(({ row, column }) => keyOf(row, column)) : []),
     [selectedWord],
   );
-  const displayedLetters = { ...privateLetters, ...optimisticLetters };
+  const displayedLetters = crossword.phase === "review"
+    ? crossword.correctionLetters
+    : { ...privateLetters, ...optimisticLetters };
   const remainingSeconds = Math.max(0, Math.ceil((crossword.responseDeadline - (now + serverTimeOffsetMs)) / 1000));
   const minutes = Math.floor(remainingSeconds / 60);
   const seconds = String(remainingSeconds % 60).padStart(2, "0");
@@ -85,6 +89,9 @@ export function CrosswordScreen({ room, crossword, privateLetters, sessionId, se
   const downWords = crossword.words
     .filter((word) => word.direction === "down")
     .sort((left, right) => left.number - right.number);
+  const reviewWords = [...crossword.words]
+    .sort((left, right) => left.number - right.number || left.direction.localeCompare(right.direction));
+  const nextReviewWord = reviewWords[crossword.reviewIndex];
   const ranking = useMemo(
     () => room.players
       .filter((player) => player.role === "participant")
@@ -205,6 +212,19 @@ export function CrosswordScreen({ room, crossword, privateLetters, sessionId, se
     }
   }
 
+  async function advanceReview() {
+    if (returning) return;
+    setReturning(true);
+    setError(null);
+    try {
+      await onAdvance();
+      setReturning(false);
+    } catch (actionError) {
+      setError(actionError instanceof Error ? actionError.message : "Impossible de poursuivre la correction.");
+      setReturning(false);
+    }
+  }
+
   if (crossword.phase === "results") {
     return (
       <main className="crossword-shell results-shell">
@@ -239,25 +259,50 @@ export function CrosswordScreen({ room, crossword, privateLetters, sessionId, se
   return (
     <main className="crossword-shell">
       <header className="guesser-header crossword-header">
-        <div><Brand compact /><h1 className="page-title">Mots croisés</h1></div>
+        <div>
+          <Brand compact />
+          <h1 className="page-title">Mots croisés</h1>
+        </div>
         <div className="header-actions">
           {!serverConnected && <span className="status-banner warning">Reconnexion…</span>}
-          {isHost && <button className="ghost-button danger" type="button" disabled={returning} onClick={() => void endGame()}>Terminer la partie</button>}
+          {isHost && <button className="ghost-button danger" type="button" disabled={returning} onClick={() => void returnToLobby()}>Quitter le jeu</button>}
         </div>
       </header>
 
-      <div className={`crossword-timer ${remainingSeconds <= 60 ? "urgent" : ""}`} role="timer">
-        Temps restant : {minutes}:{seconds}
-      </div>
+      {crossword.phase === "playing" && (
+        <div className={`crossword-timer ${remainingSeconds <= 60 ? "urgent" : ""}`} role="timer">
+          Temps restant : {minutes}:{seconds}
+        </div>
+      )}
+      {isHost && crossword.phase === "playing" && (
+        <div className="crossword-end-action">
+          <button className="primary-button" type="button" disabled={returning} onClick={() => void endGame()}>
+            Terminer la partie
+          </button>
+        </div>
+      )}
+      {isHost && crossword.phase === "review" && (
+        <div className="crossword-end-action">
+          <button className="primary-button" type="button" disabled={returning} onClick={() => void advanceReview()}>
+            {nextReviewWord
+              ? `Afficher le mot ${nextReviewWord.number} ${nextReviewWord.direction === "across" ? "horizontal" : "vertical"}`
+              : "Voir le classement"}
+          </button>
+        </div>
+      )}
       {error && <div className="form-error">{error}</div>}
 
-      {!isHost && (
+      {!isHost && crossword.phase === "review" && (
+        <h2 className="crossword-review-title">Correction</h2>
+      )}
+
+      {(!isHost || crossword.phase === "review") && (
       <div className="crossword-layout">
         <aside className="crossword-clues crossword-clues-across app-panel">
           <h2 className="panel-title">Horizontal</h2>
           <div className="crossword-clue-list">
             {acrossWords.map((word) => (
-              <button key={word.id} type="button" className={`crossword-clue ${selectedWordId === word.id ? "selected" : ""}`} onClick={() => {
+              <button key={word.id} type="button" className={`crossword-clue ${highlightedWordId === word.id ? "selected" : ""}`} onClick={() => {
                 if (!canWrite) return;
                 setSelectedWordId(word.id);
                 setSelectedCell(keyOf(word.row, word.column));
@@ -303,7 +348,7 @@ export function CrosswordScreen({ room, crossword, privateLetters, sessionId, se
           <h2 className="panel-title">Vertical</h2>
           <div className="crossword-clue-list">
             {downWords.map((word) => (
-              <button key={word.id} type="button" className={`crossword-clue ${selectedWordId === word.id ? "selected" : ""}`} onClick={() => {
+              <button key={word.id} type="button" className={`crossword-clue ${highlightedWordId === word.id ? "selected" : ""}`} onClick={() => {
                 if (!canWrite) return;
                 setSelectedWordId(word.id);
                 setSelectedCell(keyOf(word.row, word.column));

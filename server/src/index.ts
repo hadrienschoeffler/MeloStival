@@ -3,7 +3,7 @@ import cors from "cors";
 import express from "express";
 import { Server } from "socket.io";
 import { GENSHIN_LOCATIONS, getGenshinAnswerPoints } from "./genshin-content.js";
-import { crosswordCellExists, crosswordIsSolved, getCrosswordScore } from "./crossword-content.js";
+import { CROSSWORD_WORDS, crosswordCellExists, crosswordIsSolved, getCrosswordScore } from "./crossword-content.js";
 import {
   createRoomCode,
   isValidAvatarId,
@@ -88,7 +88,8 @@ function scheduleCrosswordDeadline(room: Room): void {
 
 function finishCrossword(room: Room): void {
   if (!room.crossword) return;
-  room.crossword.phase = "results";
+  room.crossword.phase = "review";
+  room.crossword.reviewIndex = 0;
   room.crossword.scores = Object.fromEntries(
     [...room.players.values()]
       .filter((player) => player.role === "participant")
@@ -678,6 +679,7 @@ io.on("connection", (socket) => {
       lettersBySession: {},
       completedSessionIds: [],
       scores: {},
+      reviewIndex: 0,
       revision: 0,
     };
     scheduleCrosswordDeadline(room);
@@ -738,6 +740,25 @@ io.on("connection", (socket) => {
       return;
     }
     finishCrossword(room);
+    emitRoom(room);
+    ack({ ok: true, room: toPublicRoom(room) });
+  });
+
+  socket.on("crossword:advance", (rawPayload: Record<string, unknown>, ack: Ack) => {
+    const sessionId = rawPayload.sessionId;
+    const room = rooms.get(normalizeRoomCode(rawPayload.roomCode));
+    if (
+      !isValidSessionId(sessionId) ||
+      !room ||
+      !hostOwnsSocket(room, sessionId, socket.id) ||
+      !room.crossword ||
+      room.crossword.phase !== "review"
+    ) {
+      ack({ ok: false, error: "Action réservée à l'Host pendant la correction." });
+      return;
+    }
+    if (room.crossword.reviewIndex < CROSSWORD_WORDS.length) room.crossword.reviewIndex += 1;
+    else room.crossword.phase = "results";
     emitRoom(room);
     ack({ ok: true, room: toPublicRoom(room) });
   });

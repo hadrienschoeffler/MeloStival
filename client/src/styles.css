@@ -71,7 +71,13 @@ input {
 /* Mots croisés */
 .crossword-shell {
   min-height: 100vh;
+  overflow-x: hidden;
   padding: 28px clamp(10px, 1.5vw, 24px) 44px;
+}
+
+.crossword-shell.results-shell {
+  width: min(760px, calc(100% - 36px));
+  margin-inline: auto;
 }
 
 .crossword-header {
@@ -130,6 +136,24 @@ input {
 .guesser-timer.ending {
   background: var(--danger-soft);
   color: var(--danger);
+}
+
+.crossword-end-action {
+  display: flex;
+  justify-content: center;
+  margin: -7px 0 20px;
+}
+
+.crossword-review-title {
+  width: fit-content;
+  margin: 0 auto 12px;
+  border-radius: var(--radius-md);
+  background: var(--accent);
+  padding: 8px 16px;
+  color: #fffdf9;
+  font-size: 22px;
+  text-align: center;
+  box-shadow: 0 8px 24px rgba(67, 58, 50, 0.1);
 }
 
 .crossword-cell {
@@ -232,13 +256,21 @@ input {
   color: var(--text);
 }
 
-@media (max-width: 980px) {
+@media (max-width: 1160px) {
   .crossword-layout {
     grid-template-columns: 1fr;
   }
 
   .crossword-board-panel {
     order: -1;
+  }
+
+  .crossword-clues-across {
+    order: 0;
+  }
+
+  .crossword-clues-down {
+    order: 1;
   }
 }
 

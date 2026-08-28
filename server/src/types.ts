@@ -45,11 +45,12 @@ export interface GenshinState {
 }
 
 export interface CrosswordState {
-  phase: "playing" | "results";
+  phase: "playing" | "review" | "results";
   responseDeadline: number;
   lettersBySession: Record<string, Record<string, string>>;
   completedSessionIds: string[];
   scores: Record<string, number>;
+  reviewIndex: number;
   revision: number;
 }
 
@@ -69,6 +70,9 @@ export interface PublicCrosswordState {
   letters: Record<string, string>;
   completed: boolean;
   scores: Record<string, number>;
+  reviewIndex: number;
+  correctionLetters: Record<string, string>;
+  activeWordId: string | null;
   revision: number;
   rows: number;
   columns: number;

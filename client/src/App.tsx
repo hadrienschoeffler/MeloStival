@@ -226,7 +226,7 @@ function App() {
     setRoom(result.room);
   }
 
-  async function crosswordAction(action: "start" | "end" | "return") {
+  async function crosswordAction(action: "start" | "end" | "advance" | "return") {
     if (!room) return;
     const result = await emitWithAck(`crossword:${action}`, { sessionId, roomCode: room.code });
     if (!result.ok) throw new Error(result.error);
@@ -284,6 +284,7 @@ function App() {
           serverTimeOffsetMs={serverTimeOffsetMs}
           onLetter={setCrosswordLetter}
           onEnd={() => crosswordAction("end")}
+          onAdvance={() => crosswordAction("advance")}
           onReturn={() => crosswordAction("return")}
         />
       );

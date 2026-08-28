@@ -69,7 +69,7 @@ export interface CrosswordWord {
 }
 
 export interface CrosswordState {
-  phase: "playing" | "results";
+  phase: "playing" | "review" | "results";
   responseDeadline: number;
   rows: number;
   columns: number;
@@ -77,6 +77,9 @@ export interface CrosswordState {
   letters: Record<string, string>;
   completed: boolean;
   scores: Record<string, number>;
+  reviewIndex: number;
+  correctionLetters: Record<string, string>;
+  activeWordId: string | null;
   revision: number;
 }
 
