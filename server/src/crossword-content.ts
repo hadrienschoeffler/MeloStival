@@ -25,18 +25,21 @@ export interface CrosswordGridDefinition {
 
 
 export const EASY_CROSSWORD_ENTRIES: CrosswordEntry[] = [
-  { answer: "PRISE", clue: "lance de pêche" },
-  { answer: "HYPOSTASE", clue: "C'est carré!" },
-  { answer: "NARUKAMI", clue: "Sanctuaire de cerisier" },
-  { answer: "HEIZOU", clue: "Détective prodige" },
-  { answer: "LUMIDOUCE", clue: "Un instrument ou un moyen pratique" },
-  { answer: "HULAO", clue: "Qui fait face au mont Aozang" },
-  { answer: "FATALITE", clue: "Pierre d'invocation temporaires" },
-  { answer: "ENKANOMIYA", clue: "De la nuit blanche à la nuit sans fin" },
-  { answer: "LOUPIN", clue: "Concierge" },
-  { answer: "ESCOFFIER", clue: "Diablesse des fourneaux" },
-  { answer: "ECHO", clue: "Défi de trainé" },
-  { answer: "ALCOR", clue: "Vaisseau du crux" },
+  { answer: "APEP", clue: "Dragon gardien de l'oasis" },
+  { answer: "ABYSSE", clue: "Tous les 16 du mois" },
+  { answer: "DILUC", clue: "Maître du domaine de l'aurore" },
+  { answer: "SAURIEN", clue: "Partenaire des natlanois" },
+  { answer: "SORCIERE", clue: "A 7 elles composent l'Hexenzirkel" },
+  { answer: "DETECTEUR", clue: "Fait apparaître des trésors aux alentours" },
+  { answer: "ENDURANCE", clue: "Pour courir, nager, grimper, planer" },
+  { answer: "INVOCATION", clue: "Echange contre des primogemmes" },
+  { answer: "CLORINDE", clue: "Duelliste mandaté de Fontaine" },
+  { answer: "GOUFRE", clue: "Mines souterraines" },
+  { answer: "PIGEON", clue: "Protégé de Timmy" },
+  { answer: "PAIMON", clue: "Guide touristique ou casse-croûte d'urgence" },
+  { answer: "INAZUMA", clue: "Région electro" },
+  { answer: "BLOB", clue: "créature molle élémentaire" },
+  { answer: "MORA", clue: "Monnaie de Teyvat" },
 ];
 
 
@@ -203,12 +206,30 @@ function createGrid(
   entries: CrosswordEntry[],
 ): CrosswordGridDefinition {
   const generatedLayout = generateLayout(entries);
-  const numberedStarts = [...new Set(generatedLayout.map((word) => cellKey(word.row, word.column)))]
-    .sort((left, right) => {
-      const [leftRow, leftColumn] = left.split(":").map(Number);
-      const [rightRow, rightColumn] = right.split(":").map(Number);
-      return leftRow - rightRow || leftColumn - rightColumn;
-    });
+  const starts = new Map<string, { row: number; column: number; directions: Set<Direction> }>();
+  for (const word of generatedLayout) {
+    const key = cellKey(word.row, word.column);
+    const start = starts.get(key);
+    if (start) start.directions.add(word.direction);
+    else starts.set(key, { row: word.row, column: word.column, directions: new Set([word.direction]) });
+  }
+
+  const remainingStarts = [...starts.entries()].sort(([, left], [, right]) =>
+    left.row - right.row || left.column - right.column,
+  );
+  const numberedStarts: string[] = [];
+  let nextDirection: Direction = remainingStarts[0]?.[1].directions.has("across") ? "across" : "down";
+
+  // La position des mots ne change pas : seuls leurs numéros alternent entre
+  // horizontal et vertical. Un départ commun conserve un numéro commun.
+  while (remainingStarts.length > 0) {
+    const matchingIndex = remainingStarts.findIndex(([, start]) => start.directions.has(nextDirection));
+    const selectedIndex = matchingIndex >= 0 ? matchingIndex : 0;
+    const [selected] = remainingStarts.splice(selectedIndex, 1);
+    numberedStarts.push(selected[0]);
+    nextDirection = nextDirection === "across" ? "down" : "across";
+  }
+
   const numberByStart = new Map(numberedStarts.map((start, index) => [start, index + 1]));
   const words: CrosswordWordDefinition[] = generatedLayout.map((word) => ({
     ...word,
