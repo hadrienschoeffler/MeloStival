@@ -24,7 +24,7 @@ export const GENSHIN_LOCATIONS: GenshinLocationDefinition[] = [
     id: "2",
     title: "Vaisseau voyageur",
     povImage: "/genshin/Lieu2/Lieu_2.png",
-    regionMapImage: ["/genshin/Lieu2/lune_p1.png", "/genshin/Lieu2/lune_p2.png"],
+    regionMapImage: ["/genshin/Lieu2/Lune_p1.png", "/genshin/Lieu2/Lune_p2.png"],
     gridImage: "/genshin/Lieu2/Cercle_de_pierre_de_nuur.png",
     answerGridImage: "/genshin/Lieu2/Reponse_Lieu2.png",
     answers: [["Lune"], ["Cercle de pierre de nuur"], ["N18", "N 18"]],
