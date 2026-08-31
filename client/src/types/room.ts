@@ -1,4 +1,5 @@
 export type PlayerRole = "host" | "participant";
+export type CrosswordGridId = "easy" | "medium" | "hard" | "hardcore";
 
 export interface PublicPlayer {
   sessionId: string;
@@ -68,16 +69,23 @@ export interface CrosswordWord {
   direction: "across" | "down";
 }
 
-export interface CrosswordState {
-  phase: "playing" | "review" | "results";
-  responseDeadline: number;
+export interface CrosswordGrid {
+  id: CrosswordGridId;
+  label: string;
+  pointsPerWord: number;
   rows: number;
   columns: number;
   words: CrosswordWord[];
-  letters: Record<string, string>;
-  completed: boolean;
+}
+
+export interface CrosswordState {
+  phase: "setup" | "playing" | "review" | "results";
+  responseDeadline: number;
+  grids: CrosswordGrid[];
   scores: Record<string, number>;
-  reviewIndex: number;
+  selectedSessionIds: string[];
+  reviewGridId: CrosswordGridId | null;
+  reviewWordIndex: number;
   correctionLetters: Record<string, string>;
   activeWordId: string | null;
   revision: number;

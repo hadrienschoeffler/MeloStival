@@ -1,6 +1,6 @@
 import { randomInt } from "node:crypto";
 import { GENSHIN_LOCATIONS, getGenshinAnswerPoints } from "./genshin-content.js";
-import { CROSSWORD_COLUMNS, CROSSWORD_ROWS, CROSSWORD_WORDS } from "./crossword-content.js";
+import { CROSSWORD_GRIDS, CROSSWORD_GRID_ORDER } from "./crossword-content.js";
 import type { PublicRoom, Room } from "./types.js";
 
 const ROOM_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -41,7 +41,7 @@ export function createRoomCode(): string {
   throw new Error("Impossible de générer un code de salon unique.");
 }
 
-export function toPublicRoom(room: Room, viewerSessionId?: string): PublicRoom {
+export function toPublicRoom(room: Room): PublicRoom {
   const genshinLocation = room.genshin ? GENSHIN_LOCATIONS[room.genshin.locationIndex] : null;
   const showGenshinAnswers = room.genshin?.phase === "recap" || room.genshin?.phase === "results";
   const genshin = room.genshin && genshinLocation
@@ -92,12 +92,14 @@ export function toPublicRoom(room: Room, viewerSessionId?: string): PublicRoom {
           : null,
       }
     : null;
-  const crosswordReviewWords = [...CROSSWORD_WORDS].sort(
+  const reviewGridId = room.crossword?.phase === "review"
+    ? CROSSWORD_GRID_ORDER[room.crossword.reviewGridIndex] ?? null
+    : null;
+  const reviewGrid = reviewGridId ? CROSSWORD_GRIDS[reviewGridId] : null;
+  const crosswordReviewWords = [...(reviewGrid?.words ?? [])].sort(
     (left, right) => left.number - right.number || left.direction.localeCompare(right.direction),
   );
-  const revealedCrosswordWords = room.crossword?.phase === "results"
-    ? crosswordReviewWords
-    : crosswordReviewWords.slice(0, room.crossword?.reviewIndex ?? 0);
+  const revealedCrosswordWords = crosswordReviewWords.slice(0, room.crossword?.reviewWordIndex ?? 0);
   const correctionLetters = Object.fromEntries(
     revealedCrosswordWords.flatMap((word) =>
       [...word.answer].map((letter, index) => {
@@ -119,20 +121,26 @@ export function toPublicRoom(room: Room, viewerSessionId?: string): PublicRoom {
       ? {
           phase: room.crossword.phase,
           responseDeadline: room.crossword.responseDeadline,
-          letters: viewerSessionId === room.hostSessionId
-            ? {}
-            : { ...(viewerSessionId ? room.crossword.lettersBySession[viewerSessionId] : {}) },
-          completed: Boolean(viewerSessionId && room.crossword.completedSessionIds.includes(viewerSessionId)),
           scores: room.crossword.scores,
-          reviewIndex: room.crossword.reviewIndex,
+          selectedSessionIds: Object.keys(room.crossword.selectedGridBySession),
+          reviewGridId,
+          reviewWordIndex: room.crossword.reviewWordIndex,
           correctionLetters,
-          activeWordId: room.crossword.phase === "review" && room.crossword.reviewIndex > 0
-            ? crosswordReviewWords[room.crossword.reviewIndex - 1]?.id ?? null
+          activeWordId: room.crossword.phase === "review" && room.crossword.reviewWordIndex > 0
+            ? crosswordReviewWords[room.crossword.reviewWordIndex - 1]?.id ?? null
             : null,
           revision: room.crossword.revision,
-          rows: CROSSWORD_ROWS,
-          columns: CROSSWORD_COLUMNS,
-          words: CROSSWORD_WORDS.map(({ answer, ...word }) => ({ ...word, length: answer.length })),
+          grids: CROSSWORD_GRID_ORDER.map((gridId) => {
+            const grid = CROSSWORD_GRIDS[gridId];
+            return {
+              id: grid.id,
+              label: grid.label,
+              pointsPerWord: grid.pointsPerWord,
+              rows: grid.rows,
+              columns: grid.columns,
+              words: grid.words.map(({ answer, ...word }) => ({ ...word, length: answer.length })),
+            };
+          }),
         }
       : null,
     players: [...room.players.values()].map((player) => ({

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
-import type { CrosswordState, CrosswordWord, PublicRoom } from "../types/room";
+import type { CrosswordGridId, CrosswordState, CrosswordWord, PublicRoom } from "../types/room";
 import { avatarSrc } from "../lib/avatars";
 import { Brand } from "./Brand";
 
@@ -9,10 +9,15 @@ interface CrosswordScreenProps {
   crossword: CrosswordState;
   privateLetters: Record<string, string>;
   completed: boolean;
+  selectedGridId: CrosswordGridId | null;
+  activeGridId: CrosswordGridId | null;
   sessionId: string;
   serverConnected: boolean;
   serverTimeOffsetMs: number;
   onLetter: (row: number, column: number, letter: string) => Promise<void>;
+  onSelectGrid: (gridId: CrosswordGridId) => Promise<void>;
+  onStartHardcore: () => Promise<void>;
+  onBegin: () => Promise<void>;
   onEnd: () => Promise<void>;
   onAdvance: () => Promise<void>;
   onReturn: () => Promise<void>;
@@ -36,7 +41,7 @@ function cellsForWord(word: CrosswordWord) {
   }));
 }
 
-export function CrosswordScreen({ room, crossword, privateLetters, sessionId, serverConnected, serverTimeOffsetMs, onLetter, onEnd, onAdvance, onReturn }: CrosswordScreenProps) {
+export function CrosswordScreen({ room, crossword, privateLetters, selectedGridId, activeGridId, sessionId, serverConnected, serverTimeOffsetMs, onLetter, onSelectGrid, onStartHardcore, onBegin, onEnd, onAdvance, onReturn }: CrosswordScreenProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const pendingRef = useRef(new Map<string, string>());
   const [selectedCell, setSelectedCell] = useState<string | null>(null);
@@ -45,8 +50,11 @@ export function CrosswordScreen({ room, crossword, privateLetters, sessionId, se
   const [error, setError] = useState<string | null>(null);
   const [returning, setReturning] = useState(false);
   const [now, setNow] = useState(Date.now());
+  const [showHardcoreChoice, setShowHardcoreChoice] = useState(false);
   const me = room.players.find((player) => player.sessionId === sessionId);
   const isHost = me?.role === "host";
+  const displayedGridId = crossword.phase === "review" ? crossword.reviewGridId : activeGridId;
+  const grid = crossword.grids.find((candidate) => candidate.id === displayedGridId) ?? null;
 
   useEffect(() => {
     if (crossword.phase !== "playing") return;
@@ -54,9 +62,17 @@ export function CrosswordScreen({ room, crossword, privateLetters, sessionId, se
     return () => window.clearInterval(interval);
   }, [crossword.phase]);
 
+  useEffect(() => {
+    setSelectedCell(null);
+    setSelectedWordId(null);
+    setOptimisticLetters({});
+    pendingRef.current.clear();
+    setShowHardcoreChoice(false);
+  }, [displayedGridId]);
+
   const cells = useMemo(() => {
     const result = new Map<string, CellDefinition>();
-    for (const word of crossword.words) {
+    for (const word of grid?.words ?? []) {
       for (const position of cellsForWord(word)) {
         const key = keyOf(position.row, position.column);
         const existing = result.get(key);
@@ -68,10 +84,10 @@ export function CrosswordScreen({ room, crossword, privateLetters, sessionId, se
       if (start) start.number = Math.min(start.number ?? word.number, word.number);
     }
     return result;
-  }, [crossword.words]);
+  }, [grid]);
 
   const highlightedWordId = crossword.phase === "review" ? crossword.activeWordId : selectedWordId;
-  const selectedWord = crossword.words.find((word) => word.id === highlightedWordId) ?? null;
+  const selectedWord = grid?.words.find((word) => word.id === highlightedWordId) ?? null;
   const selectedWordCells = useMemo(
     () => new Set(selectedWord ? cellsForWord(selectedWord).map(({ row, column }) => keyOf(row, column)) : []),
     [selectedWord],
@@ -82,16 +98,28 @@ export function CrosswordScreen({ room, crossword, privateLetters, sessionId, se
   const remainingSeconds = Math.max(0, Math.ceil((crossword.responseDeadline - (now + serverTimeOffsetMs)) / 1000));
   const minutes = Math.floor(remainingSeconds / 60);
   const seconds = String(remainingSeconds % 60).padStart(2, "0");
-  const canWrite = !isHost && crossword.phase === "playing" && remainingSeconds > 0;
-  const acrossWords = crossword.words
+  const canWrite = !isHost && Boolean(grid) && crossword.phase === "playing" && remainingSeconds > 0;
+  const acrossWords = (grid?.words ?? [])
     .filter((word) => word.direction === "across")
     .sort((left, right) => left.number - right.number);
-  const downWords = crossword.words
+  const downWords = (grid?.words ?? [])
     .filter((word) => word.direction === "down")
     .sort((left, right) => left.number - right.number);
-  const reviewWords = [...crossword.words]
+  const reviewWords = [...(grid?.words ?? [])]
     .sort((left, right) => left.number - right.number || left.direction.localeCompare(right.direction));
-  const nextReviewWord = reviewWords[crossword.reviewIndex];
+  const nextReviewWord = reviewWords[crossword.reviewWordIndex];
+  const reviewGridPosition = crossword.reviewGridId
+    ? crossword.grids.findIndex((candidate) => candidate.id === crossword.reviewGridId)
+    : -1;
+  const nextReviewGrid = crossword.grids[reviewGridPosition + 1];
+  const hardcoreGrid = crossword.grids.find((candidate) => candidate.id === "hardcore");
+  const connectedParticipants = room.players.filter(
+    (player) => player.role === "participant" && player.connected,
+  );
+  const selectedParticipantCount = connectedParticipants.filter(
+    (player) => crossword.selectedSessionIds.includes(player.sessionId),
+  ).length;
+  const everyoneSelected = connectedParticipants.length > 0 && selectedParticipantCount === connectedParticipants.length;
   const ranking = useMemo(
     () => room.players
       .filter((player) => player.role === "participant")
@@ -225,6 +253,45 @@ export function CrosswordScreen({ room, crossword, privateLetters, sessionId, se
     }
   }
 
+  async function chooseGrid(gridId: CrosswordGridId) {
+    if (returning) return;
+    setReturning(true);
+    setError(null);
+    try {
+      await onSelectGrid(gridId);
+      setReturning(false);
+    } catch (actionError) {
+      setError(actionError instanceof Error ? actionError.message : "Impossible de choisir cette grille.");
+      setReturning(false);
+    }
+  }
+
+  async function beginGame() {
+    if (returning) return;
+    setReturning(true);
+    setError(null);
+    try {
+      await onBegin();
+      setReturning(false);
+    } catch (actionError) {
+      setError(actionError instanceof Error ? actionError.message : "Impossible de démarrer la partie.");
+      setReturning(false);
+    }
+  }
+
+  async function startHardcore() {
+    if (returning) return;
+    setReturning(true);
+    setError(null);
+    try {
+      await onStartHardcore();
+      setReturning(false);
+    } catch (actionError) {
+      setError(actionError instanceof Error ? actionError.message : "Impossible de lancer la grille Hardcore.");
+      setReturning(false);
+    }
+  }
+
   if (crossword.phase === "results") {
     return (
       <main className="crossword-shell results-shell">
@@ -281,22 +348,55 @@ export function CrosswordScreen({ room, crossword, privateLetters, sessionId, se
           </button>
         </div>
       )}
+      {crossword.phase === "review" && (
+        <h2 className="crossword-review-title">Correction{grid ? ` — ${grid.label}` : ""}</h2>
+      )}
       {isHost && crossword.phase === "review" && (
         <div className="crossword-end-action">
           <button className="primary-button" type="button" disabled={returning} onClick={() => void advanceReview()}>
             {nextReviewWord
               ? `Afficher le mot ${nextReviewWord.number} ${nextReviewWord.direction === "across" ? "horizontal" : "vertical"}`
-              : "Voir le classement"}
+              : nextReviewGrid
+                ? `Passer à la correction ${nextReviewGrid.label}`
+                : "Voir le classement"}
           </button>
         </div>
       )}
       {error && <div className="form-error">{error}</div>}
 
-      {!isHost && crossword.phase === "review" && (
-        <h2 className="crossword-review-title">Correction</h2>
+      {isHost && crossword.phase === "setup" && (
+        <section className="crossword-level-picker app-panel">
+          <h2>Choix des grilles</h2>
+          <p className="crossword-selection-count">
+            <strong>{selectedParticipantCount}</strong> / {connectedParticipants.length} participant(s) prêt(s)
+          </p>
+          <button className="primary-button" type="button" disabled={returning || !everyoneSelected} onClick={() => void beginGame()}>
+            Démarrer la partie
+          </button>
+        </section>
       )}
 
-      {(!isHost || crossword.phase === "review") && (
+      {!isHost && crossword.phase === "setup" && (
+        <section className="crossword-level-picker app-panel">
+          <h2>Choisis ta grille</h2>
+          <div className="crossword-level-options">
+            {crossword.grids.filter((candidate) => candidate.id !== "hardcore").map((candidate) => (
+              <button
+                key={candidate.id}
+                className={selectedGridId === candidate.id ? "selected" : ""}
+                type="button"
+                disabled={returning}
+                onClick={() => void chooseGrid(candidate.id)}
+              >
+                <strong>{candidate.label}</strong>
+                <span>{candidate.pointsPerWord} point{candidate.pointsPerWord > 1 ? "s" : ""} par mot</span>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {grid && (crossword.phase === "playing" && !isHost || crossword.phase === "review") && (
       <div className="crossword-layout">
         <aside className="crossword-clues crossword-clues-across app-panel">
           <h2 className="panel-title">Horizontal</h2>
@@ -317,12 +417,12 @@ export function CrosswordScreen({ room, crossword, privateLetters, sessionId, se
         <section className="crossword-board-panel app-panel" aria-disabled={!canWrite}>
           <div
             className="crossword-grid"
-            style={{ gridTemplateColumns: `repeat(${crossword.columns}, 36px)` }}
+            style={{ gridTemplateColumns: `repeat(${grid.columns}, 36px)` }}
             aria-label="Grille de mots croisés"
           >
-            {Array.from({ length: crossword.rows * crossword.columns }, (_, index) => {
-              const row = Math.floor(index / crossword.columns);
-              const column = index % crossword.columns;
+            {Array.from({ length: grid.rows * grid.columns }, (_, index) => {
+              const row = Math.floor(index / grid.columns);
+              const column = index % grid.columns;
               const key = keyOf(row, column);
               const cell = cells.get(key);
               if (!cell) return <span className="crossword-cell blocked" key={key} />;
@@ -360,6 +460,25 @@ export function CrosswordScreen({ room, crossword, privateLetters, sessionId, se
           </div>
         </aside>
       </div>
+      )}
+
+      {!isHost && crossword.phase === "playing" && activeGridId && activeGridId !== "hardcore" && (
+        <div className="crossword-hardcore-action">
+          {!showHardcoreChoice ? (
+            <button className="primary-button" type="button" onClick={() => setShowHardcoreChoice(true)}>
+              J'ai terminé
+            </button>
+          ) : (
+            <div className="crossword-hardcore-choice app-panel">
+              <strong>Passer à la grille Hardcore ?</strong>
+              <span>Chaque mot correct y rapporte {hardcoreGrid?.pointsPerWord ?? 5} points. Tu ne pourras pas revenir à ta première grille.</span>
+              <div>
+                <button className="ghost-button" type="button" disabled={returning} onClick={() => setShowHardcoreChoice(false)}>Continuer cette grille</button>
+                <button className="primary-button" type="button" disabled={returning} onClick={() => void startHardcore()}>Passer en Hardcore</button>
+              </div>
+            </div>
+          )}
+        </div>
       )}
     </main>
   );

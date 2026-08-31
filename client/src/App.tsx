@@ -6,7 +6,7 @@ import { GenshinGuesserScreen } from "./components/GenshinGuesserScreen";
 import { CrosswordScreen } from "./components/Crossword";
 import { clearLastRoomCode, getLastRoomCode, getOrCreateSessionId, saveLastRoomCode } from "./lib/session";
 import { socket } from "./lib/socket";
-import type { PublicRoom, RoomActionResult } from "./types/room";
+import type { CrosswordGridId, PublicRoom, RoomActionResult } from "./types/room";
 
 const ACK_TIMEOUT_MS = 5000;
 
@@ -30,7 +30,12 @@ function App() {
   const [canCreateRoom, setCanCreateRoom] = useState(true);
   const [serverTimeOffsetMs, setServerTimeOffsetMs] = useState(0);
   const [connectionError, setConnectionError] = useState<string | null>(null);
-  const [crosswordPrivate, setCrosswordPrivate] = useState<{ letters: Record<string, string>; completed: boolean }>({ letters: {}, completed: false });
+  const [crosswordPrivate, setCrosswordPrivate] = useState<{
+    letters: Record<string, string>;
+    completed: boolean;
+    selectedGridId: CrosswordGridId | null;
+    activeGridId: CrosswordGridId | null;
+  }>({ letters: {}, completed: false, selectedGridId: null, activeGridId: null });
 
   const tryResume = useCallback(async () => {
     const lastRoomCode = getLastRoomCode();
@@ -113,8 +118,13 @@ function App() {
       setCanCreateRoom(result.canCreate);
     }
 
-    function onCrosswordPrivateState(result: { letters: Record<string, string>; completed: boolean }) {
-      setCrosswordPrivate({ letters: result.letters, completed: result.completed });
+    function onCrosswordPrivateState(result: {
+      letters: Record<string, string>;
+      completed: boolean;
+      selectedGridId: CrosswordGridId | null;
+      activeGridId: CrosswordGridId | null;
+    }) {
+      setCrosswordPrivate(result);
     }
 
     socket.on("connect", onConnect);
@@ -226,7 +236,7 @@ function App() {
     setRoom(result.room);
   }
 
-  async function crosswordAction(action: "start" | "end" | "advance" | "return") {
+  async function crosswordAction(action: "start" | "begin" | "end" | "advance" | "return") {
     if (!room) return;
     const result = await emitWithAck(`crossword:${action}`, { sessionId, roomCode: room.code });
     if (!result.ok) throw new Error(result.error);
@@ -242,6 +252,20 @@ function App() {
       column,
       letter,
     });
+    if (!result.ok) throw new Error(result.error);
+    setRoom(result.room);
+  }
+
+  async function selectCrosswordGrid(gridId: CrosswordGridId) {
+    if (!room) return;
+    const result = await emitWithAck("crossword:select", { sessionId, roomCode: room.code, gridId });
+    if (!result.ok) throw new Error(result.error);
+    setRoom(result.room);
+  }
+
+  async function startHardcoreCrossword() {
+    if (!room) return;
+    const result = await emitWithAck("crossword:hardcore", { sessionId, roomCode: room.code });
     if (!result.ok) throw new Error(result.error);
     setRoom(result.room);
   }
@@ -279,10 +303,15 @@ function App() {
           crossword={room.crossword}
           privateLetters={crosswordPrivate.letters}
           completed={crosswordPrivate.completed}
+          selectedGridId={crosswordPrivate.selectedGridId}
+          activeGridId={crosswordPrivate.activeGridId}
           sessionId={sessionId}
           serverConnected={serverConnected}
           serverTimeOffsetMs={serverTimeOffsetMs}
           onLetter={setCrosswordLetter}
+          onSelectGrid={selectCrosswordGrid}
+          onStartHardcore={startHardcoreCrossword}
+          onBegin={() => crosswordAction("begin")}
           onEnd={() => crosswordAction("end")}
           onAdvance={() => crosswordAction("advance")}
           onReturn={() => crosswordAction("return")}

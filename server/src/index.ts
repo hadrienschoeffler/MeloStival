@@ -3,7 +3,15 @@ import cors from "cors";
 import express from "express";
 import { Server } from "socket.io";
 import { GENSHIN_LOCATIONS, getGenshinAnswerPoints } from "./genshin-content.js";
-import { CROSSWORD_WORDS, crosswordCellExists, crosswordIsSolved, getCrosswordScore } from "./crossword-content.js";
+import {
+  CROSSWORD_GRIDS,
+  CROSSWORD_GRID_ORDER,
+  crosswordCellExists,
+  crosswordIsSolved,
+  getCrosswordScore,
+  isCrosswordGridId,
+} from "./crossword-content.js";
+import type { CrosswordGridId } from "./crossword-content.js";
 import {
   createRoomCode,
   isValidAvatarId,
@@ -44,8 +52,14 @@ function emitRoom(room: Room): void {
   if (room.crossword) {
     for (const player of room.players.values()) {
       if (player.role !== "participant" || !player.socketId) continue;
+      const selectedGridId = room.crossword.selectedGridBySession[player.sessionId];
+      const activeGridId = room.crossword.activeGridBySession[player.sessionId];
       io.to(player.socketId).emit("crossword:private-state", {
-        letters: room.crossword.lettersBySession[player.sessionId] ?? {},
+        selectedGridId: selectedGridId ?? null,
+        activeGridId: activeGridId ?? null,
+        letters: activeGridId
+          ? room.crossword.lettersBySession[player.sessionId]?.[activeGridId] ?? {}
+          : {},
         completed: room.crossword.completedSessionIds.includes(player.sessionId),
         revision: room.crossword.revision,
       });
@@ -89,11 +103,22 @@ function scheduleCrosswordDeadline(room: Room): void {
 function finishCrossword(room: Room): void {
   if (!room.crossword) return;
   room.crossword.phase = "review";
-  room.crossword.reviewIndex = 0;
+  room.crossword.reviewGridIndex = 0;
+  room.crossword.reviewWordIndex = 0;
   room.crossword.scores = Object.fromEntries(
     [...room.players.values()]
       .filter((player) => player.role === "participant")
-      .map((player) => [player.sessionId, getCrosswordScore(room.crossword!.lettersBySession[player.sessionId] ?? {})]),
+      .map((player) => {
+        const selectedGridId = room.crossword!.selectedGridBySession[player.sessionId];
+        const playerGrids = room.crossword!.lettersBySession[player.sessionId] ?? {};
+        const primaryScore = selectedGridId
+          ? getCrosswordScore(selectedGridId, playerGrids[selectedGridId] ?? {})
+          : 0;
+        const hardcoreScore = playerGrids.hardcore
+          ? getCrosswordScore("hardcore", playerGrids.hardcore)
+          : 0;
+        return [player.sessionId, primaryScore + hardcoreScore];
+      }),
   );
 }
 
@@ -674,15 +699,100 @@ io.on("connection", (socket) => {
     room.buzzer = null;
     room.genshin = null;
     room.crossword = {
-      phase: "playing",
-      responseDeadline: Date.now() + CROSSWORD_DURATION_MS,
+      phase: "setup",
+      responseDeadline: 0,
       lettersBySession: {},
+      selectedGridBySession: {},
+      activeGridBySession: {},
       completedSessionIds: [],
       scores: {},
-      reviewIndex: 0,
+      reviewGridIndex: 0,
+      reviewWordIndex: 0,
       revision: 0,
     };
+    emitRoom(room);
+    ack({ ok: true, room: toPublicRoom(room) });
+  });
+
+  socket.on("crossword:select", (rawPayload: Record<string, unknown>, ack: Ack) => {
+    const sessionId = rawPayload.sessionId;
+    const gridId = rawPayload.gridId;
+    const room = rooms.get(normalizeRoomCode(rawPayload.roomCode));
+    const player = isValidSessionId(sessionId) ? room?.players.get(sessionId) : null;
+    if (!room || !player || player.role !== "participant" || player.socketId !== socket.id) {
+      ack({ ok: false, error: "Seuls les participants peuvent choisir une grille." });
+      return;
+    }
+    if (
+      room.currentTool !== "crossword" ||
+      !room.crossword ||
+      room.crossword.phase !== "setup" ||
+      !isCrosswordGridId(gridId) ||
+      gridId === "hardcore"
+    ) {
+      ack({ ok: false, error: "Ce niveau ne peut pas être sélectionné." });
+      return;
+    }
+    room.crossword.selectedGridBySession[player.sessionId] = gridId;
+    room.crossword.activeGridBySession[player.sessionId] = gridId;
+    room.crossword.lettersBySession[player.sessionId] = { [gridId]: {} };
+    room.crossword.revision += 1;
+    emitRoom(room);
+    ack({ ok: true, room: toPublicRoom(room) });
+  });
+
+  socket.on("crossword:begin", (rawPayload: Record<string, unknown>, ack: Ack) => {
+    const sessionId = rawPayload.sessionId;
+    const room = rooms.get(normalizeRoomCode(rawPayload.roomCode));
+    if (
+      !isValidSessionId(sessionId) ||
+      !room ||
+      !hostOwnsSocket(room, sessionId, socket.id) ||
+      !room.crossword ||
+      room.crossword.phase !== "setup"
+    ) {
+      ack({ ok: false, error: "Seul l'Host peut démarrer la partie." });
+      return;
+    }
+    const participants = [...room.players.values()].filter(
+      (player) => player.role === "participant" && player.connected,
+    );
+    if (
+      participants.length === 0 ||
+      participants.some((player) => !room.crossword!.selectedGridBySession[player.sessionId])
+    ) {
+      ack({ ok: false, error: "Tous les participants doivent choisir une grille avant de commencer." });
+      return;
+    }
+    room.crossword.phase = "playing";
+    room.crossword.responseDeadline = Date.now() + CROSSWORD_DURATION_MS;
     scheduleCrosswordDeadline(room);
+    emitRoom(room);
+    ack({ ok: true, room: toPublicRoom(room) });
+  });
+
+  socket.on("crossword:hardcore", (rawPayload: Record<string, unknown>, ack: Ack) => {
+    const sessionId = rawPayload.sessionId;
+    const room = rooms.get(normalizeRoomCode(rawPayload.roomCode));
+    const player = isValidSessionId(sessionId) ? room?.players.get(sessionId) : null;
+    if (!room || !player || player.role !== "participant" || player.socketId !== socket.id) {
+      ack({ ok: false, error: "Action réservée aux participants." });
+      return;
+    }
+    if (
+      room.currentTool !== "crossword" ||
+      !room.crossword ||
+      room.crossword.phase !== "playing" ||
+      !room.crossword.selectedGridBySession[player.sessionId] ||
+      room.crossword.activeGridBySession[player.sessionId] === "hardcore"
+    ) {
+      ack({ ok: false, error: "La grille Hardcore n'est pas disponible." });
+      return;
+    }
+    room.crossword.activeGridBySession[player.sessionId] = "hardcore";
+    room.crossword.lettersBySession[player.sessionId] ??= {};
+    room.crossword.lettersBySession[player.sessionId].hardcore = {};
+    room.crossword.revision += 1;
     emitRoom(room);
     ack({ ok: true, room: toPublicRoom(room) });
   });
@@ -691,6 +801,7 @@ io.on("connection", (socket) => {
     const sessionId = rawPayload.sessionId;
     const room = rooms.get(normalizeRoomCode(rawPayload.roomCode));
     const player = isValidSessionId(sessionId) ? room?.players.get(sessionId) : null;
+    const gridId = player && room?.crossword?.activeGridBySession[player.sessionId];
     const row = Number(rawPayload.row);
     const column = Number(rawPayload.column);
     const letter = typeof rawPayload.letter === "string"
@@ -704,7 +815,7 @@ io.on("connection", (socket) => {
       ack({ ok: false, error: "Cette grille n'est plus modifiable." });
       return;
     }
-    if (!Number.isInteger(row) || !Number.isInteger(column) || !crosswordCellExists(row, column)) {
+    if (!gridId || !Number.isInteger(row) || !Number.isInteger(column) || !crosswordCellExists(gridId, row, column)) {
       ack({ ok: false, error: "Case invalide." });
       return;
     }
@@ -714,14 +825,16 @@ io.on("connection", (socket) => {
     }
 
     const key = `${row}:${column}`;
-    const letters = room.crossword.lettersBySession[player.sessionId] ?? {};
+    const playerGrids = room.crossword.lettersBySession[player.sessionId] ?? {};
+    const letters = playerGrids[gridId] ?? {};
     if (letter) letters[key] = letter;
     else delete letters[key];
-    room.crossword.lettersBySession[player.sessionId] = letters;
+    playerGrids[gridId] = letters;
+    room.crossword.lettersBySession[player.sessionId] = playerGrids;
     room.crossword.revision += 1;
     const completedIndex = room.crossword.completedSessionIds.indexOf(player.sessionId);
-    if (crosswordIsSolved(letters) && completedIndex === -1) room.crossword.completedSessionIds.push(player.sessionId);
-    else if (!crosswordIsSolved(letters) && completedIndex !== -1) room.crossword.completedSessionIds.splice(completedIndex, 1);
+    if (crosswordIsSolved(gridId, letters) && completedIndex === -1) room.crossword.completedSessionIds.push(player.sessionId);
+    else if (!crosswordIsSolved(gridId, letters) && completedIndex !== -1) room.crossword.completedSessionIds.splice(completedIndex, 1);
     emitRoom(room);
     ack({ ok: true, room: toPublicRoom(room) });
   });
@@ -757,8 +870,16 @@ io.on("connection", (socket) => {
       ack({ ok: false, error: "Action réservée à l'Host pendant la correction." });
       return;
     }
-    if (room.crossword.reviewIndex < CROSSWORD_WORDS.length) room.crossword.reviewIndex += 1;
-    else room.crossword.phase = "results";
+    const reviewGridId = CROSSWORD_GRID_ORDER[room.crossword.reviewGridIndex] as CrosswordGridId | undefined;
+    const reviewGrid = reviewGridId ? CROSSWORD_GRIDS[reviewGridId] : null;
+    if (reviewGrid && room.crossword.reviewWordIndex < reviewGrid.words.length) {
+      room.crossword.reviewWordIndex += 1;
+    } else if (room.crossword.reviewGridIndex + 1 < CROSSWORD_GRID_ORDER.length) {
+      room.crossword.reviewGridIndex += 1;
+      room.crossword.reviewWordIndex = 0;
+    } else {
+      room.crossword.phase = "results";
+    }
     emitRoom(room);
     ack({ ok: true, room: toPublicRoom(room) });
   });

@@ -1,3 +1,5 @@
+import type { CrosswordGridId } from "./crossword-content.js";
+
 export type PlayerRole = "host" | "participant";
 export type ToolId = "buzzer" | "genshin-guesser" | "crossword";
 
@@ -45,12 +47,15 @@ export interface GenshinState {
 }
 
 export interface CrosswordState {
-  phase: "playing" | "review" | "results";
+  phase: "setup" | "playing" | "review" | "results";
   responseDeadline: number;
-  lettersBySession: Record<string, Record<string, string>>;
+  lettersBySession: Record<string, Partial<Record<CrosswordGridId, Record<string, string>>>>;
+  selectedGridBySession: Record<string, CrosswordGridId | undefined>;
+  activeGridBySession: Record<string, CrosswordGridId | undefined>;
   completedSessionIds: string[];
   scores: Record<string, number>;
-  reviewIndex: number;
+  reviewGridIndex: number;
+  reviewWordIndex: number;
   revision: number;
 }
 
@@ -64,19 +69,26 @@ export interface PublicCrosswordWord {
   direction: "across" | "down";
 }
 
-export interface PublicCrosswordState {
-  phase: CrosswordState["phase"];
-  responseDeadline: number;
-  letters: Record<string, string>;
-  completed: boolean;
-  scores: Record<string, number>;
-  reviewIndex: number;
-  correctionLetters: Record<string, string>;
-  activeWordId: string | null;
-  revision: number;
+export interface PublicCrosswordGrid {
+  id: CrosswordGridId;
+  label: string;
+  pointsPerWord: number;
   rows: number;
   columns: number;
   words: PublicCrosswordWord[];
+}
+
+export interface PublicCrosswordState {
+  phase: CrosswordState["phase"];
+  responseDeadline: number;
+  scores: Record<string, number>;
+  selectedSessionIds: string[];
+  reviewGridId: CrosswordGridId | null;
+  reviewWordIndex: number;
+  correctionLetters: Record<string, string>;
+  activeWordId: string | null;
+  revision: number;
+  grids: PublicCrosswordGrid[];
 }
 
 export interface PublicGenshinLocation {

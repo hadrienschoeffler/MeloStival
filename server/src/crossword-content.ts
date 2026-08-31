@@ -11,8 +11,20 @@ export interface CrosswordWordDefinition extends CrosswordEntry {
   direction: "across" | "down";
 }
 
-// C'est la seule partie à modifier pour créer une nouvelle grille.
-export const CROSSWORD_ENTRIES: CrosswordEntry[] = [
+export type CrosswordGridId = "easy" | "medium" | "hard" | "hardcore";
+
+export interface CrosswordGridDefinition {
+  id: CrosswordGridId;
+  label: string;
+  pointsPerWord: number;
+  rows: number;
+  columns: number;
+  words: CrosswordWordDefinition[];
+  cells: Set<string>;
+}
+
+
+export const EASY_CROSSWORD_ENTRIES: CrosswordEntry[] = [
   { answer: "PRISE", clue: "lance de pêche" },
   { answer: "HYPOSTASE", clue: "C'est carré!" },
   { answer: "NARUKAMI", clue: "Sanctuaire de cerisier" },
@@ -26,6 +38,11 @@ export const CROSSWORD_ENTRIES: CrosswordEntry[] = [
   { answer: "ECHO", clue: "Défi de trainé" },
   { answer: "ALCOR", clue: "Vaisseau du crux" },
 ];
+
+
+export const MEDIUM_CROSSWORD_ENTRIES: CrosswordEntry[] = [...EASY_CROSSWORD_ENTRIES];
+export const HARD_CROSSWORD_ENTRIES: CrosswordEntry[] = [...EASY_CROSSWORD_ENTRIES];
+export const HARDCORE_CROSSWORD_ENTRIES: CrosswordEntry[] = [...EASY_CROSSWORD_ENTRIES];
 
 type Direction = "across" | "down";
 type PreparedEntry = CrosswordEntry & { id: string };
@@ -131,7 +148,7 @@ function findPlacements(entry: PreparedEntry, placed: Placement[]): Placement[] 
 
 function generateLayout(entries: CrosswordEntry[]): Placement[] {
   const prepared = prepareEntries(entries);
-  if (!prepared.length) throw new Error("Ajoute au moins un mot dans CROSSWORD_ENTRIES.");
+  if (!prepared.length) throw new Error("Ajoute au moins un mot dans la liste de cette grille.");
   const seed: Placement = { ...prepared[0], row: 0, column: 0, direction: "across" };
   let visits = 0;
   let best: Placement[] = [seed];
@@ -179,31 +196,56 @@ function generateLayout(entries: CrosswordEntry[]): Placement[] {
   return result.map((word) => ({ ...word, row: word.row - minRow, column: word.column - minColumn }));
 }
 
-const generatedLayout = generateLayout(CROSSWORD_ENTRIES);
-const numberedStarts = [...new Set(generatedLayout.map((word) => cellKey(word.row, word.column)))]
-  .sort((left, right) => {
-    const [leftRow, leftColumn] = left.split(":").map(Number);
-    const [rightRow, rightColumn] = right.split(":").map(Number);
-    return leftRow - rightRow || leftColumn - rightColumn;
-  });
-const numberByStart = new Map(numberedStarts.map((start, index) => [start, index + 1]));
-
-export const CROSSWORD_WORDS: CrosswordWordDefinition[] = generatedLayout.map((word) => ({
-  ...word,
-  number: numberByStart.get(cellKey(word.row, word.column))!,
-}));
-
-const generatedCells = buildCells(CROSSWORD_WORDS);
-const generatedCoordinates = [...generatedCells.keys()].map((key) => key.split(":").map(Number));
-export const CROSSWORD_ROWS = Math.max(...generatedCoordinates.map(([row]) => row)) + 1;
-export const CROSSWORD_COLUMNS = Math.max(...generatedCoordinates.map(([, column]) => column)) + 1;
-
-export function crosswordCellExists(row: number, column: number): boolean {
-  return generatedCells.has(cellKey(row, column));
+function createGrid(
+  id: CrosswordGridId,
+  label: string,
+  pointsPerWord: number,
+  entries: CrosswordEntry[],
+): CrosswordGridDefinition {
+  const generatedLayout = generateLayout(entries);
+  const numberedStarts = [...new Set(generatedLayout.map((word) => cellKey(word.row, word.column)))]
+    .sort((left, right) => {
+      const [leftRow, leftColumn] = left.split(":").map(Number);
+      const [rightRow, rightColumn] = right.split(":").map(Number);
+      return leftRow - rightRow || leftColumn - rightColumn;
+    });
+  const numberByStart = new Map(numberedStarts.map((start, index) => [start, index + 1]));
+  const words: CrosswordWordDefinition[] = generatedLayout.map((word) => ({
+    ...word,
+    number: numberByStart.get(cellKey(word.row, word.column))!,
+  }));
+  const cells = new Set(buildCells(words).keys());
+  const coordinates = [...cells].map((key) => key.split(":").map(Number));
+  return {
+    id,
+    label,
+    pointsPerWord,
+    words,
+    cells,
+    rows: Math.max(...coordinates.map(([row]) => row)) + 1,
+    columns: Math.max(...coordinates.map(([, column]) => column)) + 1,
+  };
 }
 
-export function crosswordIsSolved(letters: Record<string, string>): boolean {
-  return CROSSWORD_WORDS.every((word) =>
+export const CROSSWORD_GRIDS: Record<CrosswordGridId, CrosswordGridDefinition> = {
+  easy: createGrid("easy", "Facile", 1, EASY_CROSSWORD_ENTRIES),
+  medium: createGrid("medium", "Moyen", 2, MEDIUM_CROSSWORD_ENTRIES),
+  hard: createGrid("hard", "Difficile", 3, HARD_CROSSWORD_ENTRIES),
+  hardcore: createGrid("hardcore", "Hardcore", 5, HARDCORE_CROSSWORD_ENTRIES),
+};
+
+export const CROSSWORD_GRID_ORDER: CrosswordGridId[] = ["easy", "medium", "hard", "hardcore"];
+
+export function isCrosswordGridId(value: unknown): value is CrosswordGridId {
+  return typeof value === "string" && CROSSWORD_GRID_ORDER.includes(value as CrosswordGridId);
+}
+
+export function crosswordCellExists(gridId: CrosswordGridId, row: number, column: number): boolean {
+  return CROSSWORD_GRIDS[gridId].cells.has(cellKey(row, column));
+}
+
+export function crosswordIsSolved(gridId: CrosswordGridId, letters: Record<string, string>): boolean {
+  return CROSSWORD_GRIDS[gridId].words.every((word) =>
     [...word.answer].every((letter, index) => {
       const row = word.row + (word.direction === "down" ? index : 0);
       const column = word.column + (word.direction === "across" ? index : 0);
@@ -212,12 +254,14 @@ export function crosswordIsSolved(letters: Record<string, string>): boolean {
   );
 }
 
-export function getCrosswordScore(letters: Record<string, string>): number {
-  return CROSSWORD_WORDS.filter((word) =>
+export function getCrosswordScore(gridId: CrosswordGridId, letters: Record<string, string>): number {
+  const grid = CROSSWORD_GRIDS[gridId];
+  const correctWords = grid.words.filter((word) =>
     [...word.answer].every((letter, index) => {
       const row = word.row + (word.direction === "down" ? index : 0);
       const column = word.column + (word.direction === "across" ? index : 0);
       return letters[cellKey(row, column)] === letter;
     }),
   ).length;
+  return correctWords * grid.pointsPerWord;
 }
