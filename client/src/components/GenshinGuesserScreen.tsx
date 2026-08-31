@@ -67,12 +67,23 @@ export function GenshinGuesserScreen({ room, genshin, sessionId, serverTimeOffse
   const estimatedServerNow = now + serverTimeOffsetMs;
   const remainingSeconds = Math.max(0, Math.ceil((genshin.responseDeadline - estimatedServerNow) / 1000));
   const timerExpired = estimatedServerNow >= genshin.responseDeadline;
-  const image = [genshin.location.povImage, genshin.location.regionMapImage, genshin.location.gridImage][genshin.stage];
-  const recapImage = genshin.stage === 2 ? genshin.location.answerGridImage : image;
-  const questionImages = [
-    { src: genshin.location.povImage, alt: "Vue d'origine" },
-    { src: image, alt: `Illustration pour ${stageCopy.title.toLocaleLowerCase("fr")}` },
-  ];
+  const regionMapImages = Array.isArray(genshin.location.regionMapImage)
+    ? genshin.location.regionMapImage
+    : [genshin.location.regionMapImage];
+  const stageImages = genshin.stage === 0
+    ? [genshin.location.povImage]
+    : genshin.stage === 1
+      ? regionMapImages
+      : [genshin.location.gridImage];
+  const recapImages = genshin.stage === 2 ? [genshin.location.answerGridImage] : stageImages;
+  const stageGallery = stageImages.map((src, index) => ({
+    src,
+    alt: `Illustration ${index + 1} pour ${stageCopy.title.toLocaleLowerCase("fr")}`,
+  }));
+  const questionImages = genshin.stage > 0
+    ? [{ src: genshin.location.povImage, alt: "Vue d'origine" }, ...stageGallery]
+    : stageGallery;
+  const displayedGallery = !isHost && genshin.stage > 0 ? questionImages : stageGallery;
 
   useEffect(() => {
     if (isHost || submitted || genshin.phase !== "answering") return;
@@ -168,8 +179,20 @@ export function GenshinGuesserScreen({ room, genshin, sessionId, serverTimeOffse
         <section className="guesser-recap">
           <p className="guesser-progress">Localisation {genshin.locationIndex + 1} / {genshin.locationCount}</p>
           <h1 className="page-title">Réponses — {stageCopy.title.toLocaleLowerCase("fr")}</h1>
-          <div className="recap-image-wrap">
-            <ZoomableImage src={recapImage} alt={`Correction pour ${stageCopy.title.toLocaleLowerCase("fr")}`} />
+          <div className={`recap-images ${recapImages.length > 1 ? "multiple-images" : ""}`}>
+            {recapImages.map((src, index) => (
+              <div className="recap-image-wrap" key={src}>
+                <ZoomableImage
+                  src={src}
+                  alt={`Correction ${index + 1} pour ${stageCopy.title.toLocaleLowerCase("fr")}`}
+                  gallery={recapImages.length > 1 ? recapImages.map((imageSrc, imageIndex) => ({
+                    src: imageSrc,
+                    alt: `Correction ${imageIndex + 1} pour ${stageCopy.title.toLocaleLowerCase("fr")}`,
+                  })) : undefined}
+                  initialIndex={index}
+                />
+              </div>
+            ))}
           </div>
           <p className="recap-correct-answer">
             Bonne réponse : <strong>{genshin.correctAnswer}</strong>
@@ -238,20 +261,22 @@ export function GenshinGuesserScreen({ room, genshin, sessionId, serverTimeOffse
 
       <div className="guesser-layout">
         <section className="guesser-main">
-          <div className={`guesser-images ${!isHost && genshin.stage > 0 ? "with-pov-reminder" : ""}`}>
+          <div className={`guesser-images ${!isHost && genshin.stage > 0 ? "with-pov-reminder" : ""} ${stageImages.length > 1 ? "multiple-images" : ""}`}>
             {!isHost && genshin.stage > 0 && (
               <div className="guesser-image-wrap">
                 <ZoomableImage src={genshin.location.povImage} alt="Vue d'origine" gallery={questionImages} initialIndex={0} />
               </div>
             )}
-            <div className="guesser-image-wrap">
-              <ZoomableImage
-                src={image}
-                alt={`Illustration pour ${stageCopy.title.toLocaleLowerCase("fr")}`}
-                gallery={!isHost && genshin.stage > 0 ? questionImages : undefined}
-                initialIndex={!isHost && genshin.stage > 0 ? 1 : 0}
-              />
-            </div>
+            {stageImages.map((src, index) => (
+              <div className="guesser-image-wrap" key={src}>
+                <ZoomableImage
+                  src={src}
+                  alt={`Illustration ${index + 1} pour ${stageCopy.title.toLocaleLowerCase("fr")}`}
+                  gallery={displayedGallery.length > 1 ? displayedGallery : undefined}
+                  initialIndex={index + (!isHost && genshin.stage > 0 ? 1 : 0)}
+                />
+              </div>
+            ))}
           </div>
           <div className="guesser-timer-row">
             <span className={`guesser-timer ${remainingSeconds <= 10 ? "ending" : ""}`} aria-live="polite">

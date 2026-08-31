@@ -95,7 +95,7 @@ export interface PublicGenshinLocation {
   id: string;
   title: string;
   povImage: string;
-  regionMapImage: string;
+  regionMapImage: string | string[];
   gridImage: string;
   answerGridImage: string;
 }

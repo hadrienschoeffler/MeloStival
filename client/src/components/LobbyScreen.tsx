@@ -165,9 +165,8 @@ export function LobbyScreen({ room, sessionId, serverConnected, onLeave, onStart
           </div>
         </div>
 
-        <aside className="tools-panel app-panel">
-          {isHost ? (
-            <>
+        {isHost && (
+          <aside className="tools-panel app-panel">
               <h2 className="panel-title">Outils de l'Host</h2>
               <div className="tool-list">
                 <button className="tool-card" type="button" onClick={() => setShowBuzzerSetup(true)}>
@@ -184,14 +183,8 @@ export function LobbyScreen({ room, sessionId, serverConnected, onLeave, onStart
                 </button>
               </div>
               {startError && !showBuzzerSetup && <div className="form-error tool-error">{startError}</div>}
-            </>
-          ) : (
-            <div className="waiting-block minimal-waiting">
-              <span className="waiting-indicator" />
-              <h2 className="panel-title">En attente</h2>
-            </div>
-          )}
-        </aside>
+          </aside>
+        )}
       </section>
 
       {showBuzzerSetup && (
