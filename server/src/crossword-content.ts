@@ -34,7 +34,7 @@ export const EASY_CROSSWORD_ENTRIES: CrosswordEntry[] = [
   { answer: "ENDURANCE", clue: "Pour courir, nager, grimper, planer" },
   { answer: "INVOCATION", clue: "Echange contre des primogemmes" },
   { answer: "CLORINDE", clue: "Duelliste mandaté de Fontaine" },
-  { answer: "GOUFRE", clue: "Mines souterraines" },
+  { answer: "GOUFFRE", clue: "Mines souterraines" },
   { answer: "PIGEON", clue: "Protégé de Timmy" },
   { answer: "PAIMON", clue: "Guide touristique ou casse-croûte d'urgence" },
   { answer: "INAZUMA", clue: "Région electro" },
@@ -42,10 +42,44 @@ export const EASY_CROSSWORD_ENTRIES: CrosswordEntry[] = [
   { answer: "MORA", clue: "Monnaie de Teyvat" },
 ];
 
+export const MEDIUM_CROSSWORD_ENTRIES: CrosswordEntry[] = [
+  { answer: "COPPELIA", clue: "Danseuse Artificiée" },
+  { answer: "COLLEI", clue: "Garde forestière" },
+  { answer: "ISTAROTH", clue: "Ombre du temps" },
+  { answer: "SARA", clue: "Serveuse du bon chasseur" },
+  { answer: "OROBASHI", clue: "Serpent géant de Yashiori" },
+  { answer: "GIVRELUNE", clue: "Clan de Lauma" },
+  { answer: "ASHRU", clue: "Chat de Nefer" },
+  { answer: "SCARABUTO", clue: "Coléoptère de combat" },
+  { answer: "CHUYCHU", clue: "Soeur de Chasca" },
+  { answer: "OCEANIDE", clue: "Anciens Fontainois et Fontainoises" },
+  { answer: "AJAW", clue: "Majesté saurienne suprême" },
+  { answer: "ZANDIK", clue: "Autrement appelé Dottore" },
+];
 
-export const MEDIUM_CROSSWORD_ENTRIES: CrosswordEntry[] = [...EASY_CROSSWORD_ENTRIES];
-export const HARD_CROSSWORD_ENTRIES: CrosswordEntry[] = [...EASY_CROSSWORD_ENTRIES];
-export const HARDCORE_CROSSWORD_ENTRIES: CrosswordEntry[] = [...EASY_CROSSWORD_ENTRIES];
+export const HARD_CROSSWORD_ENTRIES: CrosswordEntry[] = [
+  { answer: "LISHA", clue: "Entre gouffre et mer de nuages" },
+  { answer: "MUSK", clue: "Récif abyssal" },
+  { answer: "OCTAVIA", clue: "Sorcière créatrice du Milliastra" },
+  { answer: "PRINCE", clue: "Chat Joeur de TCG" },
+  { answer: "FISCHL", clue: "Corvus" },
+  { answer: "NIBELUNG", clue: "Deuxième descendeur" },
+  { answer: "MAMERE", clue: "Melusine peintre" },
+  { answer: "ATOCPAN", clue: "Zone du Grand Volcan de Tollan" },
+  { answer: "THOLINDIS", clue: "Compagne du Rächer de solnari" },
+  { answer: "SIGURD", clue: '"Chasser la chasse"' },
+];
+export const HARDCORE_CROSSWORD_ENTRIES: CrosswordEntry[] = [
+  { answer: "BARBARA", clue: "Toujours le meilleur pour vous" },
+  { answer: "YELENA", clue: "Parfum qu'Emilie a concocté elle-même" },
+  { answer: "TRISHIRAITE", clue: "Formé à partir de la condensation de l'énergie élémentaire" },
+  { answer: "AYIN", clue: "Hypostase Pyro" },
+  { answer: "KAMUIJIMA", clue: "Canon pour briser la barrière de Tatarasuna" },
+  { answer: "BEISHT", clue: "Epouse d'Osial" },
+  { answer: "PRUNE", clue: "20/11" },
+  { answer: "SHITOU", clue: "Propriétaire du Mystère des jades" },
+  { answer: "YOHUALTECUHTIN", clue: "Seigneur de la nuit" },
+];
 
 type Direction = "across" | "down";
 type PreparedEntry = CrosswordEntry & { id: string };
