@@ -28,7 +28,7 @@ import type { Player, Room, RoomActionResult } from "./types.js";
 const PORT = Number(process.env.PORT ?? 3001);
 const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN ?? "http://localhost:5173";
 const DISCONNECT_GRACE_MS = Number(process.env.ROOM_DISCONNECT_GRACE_MS ?? 30 * 60 * 1000);
-const GENSHIN_STAGE_DURATIONS_MS = [30_000, 30_000, 45_000] as const;
+const GENSHIN_STAGE_DURATIONS_MS = [30_000, 45_000, 45_000] as const;
 const CROSSWORD_DURATION_MS = 10 * 60 * 1000;
 
 const app = express();
